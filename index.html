@@ -1,117 +1,341 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ROGOLD</title>
-    <link rel="stylesheet" href="styles.css">
-    <style>
-    .bubble-chat {
-    font-family: Arial, sans-serif;
-    pointer-events: none;
-    user-select: none;
-    }
-    </style>
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/",
-            "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
-        }
-    }
-    </script>
+    <title>Rogold - O mundo dos jogos!</title>
+    <link rel="stylesheet" href="stylefront.css">
 </head>
 <body>
-    <div id="game-container">
-        <div class="game-ui">
-            <div class="health-bar">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                    <span style="color: #AAA;">Health</span>
-                    <span style="color: #0F0;"><span id="health-text">100</span>/100</span>
-                </div>
-                <div class="health-fill" id="health-fill"></div>
+    <div class="container">
+        <header>
+            <img src="IMG_1510.png" alt="Rogold Logo" class="logo-img">
+            <h1 class="logo">ROGOLD</h1>
+            <nav>
+                <ul class="menu">
+                    <li><a href="#" id="home-link" class="active">Home</a></li>
+                    <li><a href="#" id="games-link">Jogos</a></li>
+                    <li><a href="#">Catálogo</a></li>
+                    <li><a href="#" id="profile-link">Perfil</a></li>
+                    <li><a href="#" id="community-link">Comunidade</a></li>
+                </ul>
+            </nav>
+        </header>
+
+        <main>
+            <div class="banner">
+                <h2>Bem-vindo ao Rogold - O mundo dos jogos!</h2>
+                <p>Junte-se a milhões de jogadores e explore jogos incríveis feitos pela comunidade.</p>
             </div>
-                <div id="chat-container">
-        <div id="chat-box"></div>
-        <input type="text" id="chat-input" placeholder="Type your message...">
-        <button id="chat-send">Send</button>
-            </div>
-            <button id="respawn-btn">Respawn</button>
-            <button id="customize-btn">Colors</button>
-            <button id="potions-btn">Potions</button>
-            <button id="controls-mode-btn">Switch Controls</button>
-            <div class="color-customizer" id="color-customizer">
-                <h3>Customize Player</h3>
-                <div class="color-picker-group">
-                    <label for="head-color">Head</label>
-                    <input type="color" id="head-color" value="#FAD417">
+
+            <!-- Profile Section -->
+            <section id="profile-section" class="hidden">
+                <div class="profile-header">
+                    <button class="back-button" onclick="hideProfile()">← Voltar</button>
+                    <div class="profile-avatar">
+                        <img id="profile-avatar-img" src="" alt="Avatar do Usuário" class="hidden">
+                        <div id="avatar-placeholder" class="avatar-placeholder">
+                            <span>?</span>
+                        </div>
+                    </div>
+                    <div class="profile-info">
+                        <h2 id="profile-username">Usuário</h2>
+                        <p class="profile-status">Status: Offline</p>
+                        <p class="profile-join-date">Membro desde: <span id="join-date">--/--/----</span></p>
+                    </div>
+                    <div class="profile-stats">
+                        <div class="stat-item">
+                            <span class="stat-number">0</span>
+                            <span class="stat-label">Amigos</span>
+                        </div>
+                        <div class="stat-item">
+                            <span id="favorite-count" class="stat-number">0</span>
+                            <span class="stat-label">Favoritos</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number">0</span>
+                            <span class="stat-label">Visitas</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="color-picker-group">
-                    <label for="torso-color">Torso</label>
-                    <input type="color" id="torso-color" value="#00A2FF">
+
+                <div class="profile-content">
+                    <div class="profile-tabs">
+                        <button class="tab-button active" data-tab="about">Sobre</button>
+                        <button class="tab-button" data-tab="games">Meus Jogos</button>
+                        <button class="tab-button" data-tab="friends">Amigos</button>
+                        <button class="tab-button" data-tab="favorites">Favoritos</button>
+                        <button class="tab-button" data-tab="messages">Mensagens</button>
+                    </div>
+
+                    <div class="tab-content">
+                        <div id="about-tab" class="tab-panel active">
+                            <h3>Sobre Mim</h3>
+                            <div class="about-content">
+                                <p id="profile-bio">Este usuário ainda não escreveu uma descrição.</p>
+                                <button class="edit-button" onclick="editProfile()">Editar Perfil</button>
+                            </div>
+                        </div>
+
+                        <div id="games-tab" class="tab-panel">
+                            <h3>Meus Jogos</h3>
+                            <div class="games-grid" id="user-games">
+                                <p class="empty-message">Nenhum jogo criado ainda.</p>
+                            </div>
+                        </div>
+
+                        <div id="friends-tab" class="tab-panel">
+                            <h3>Amigos</h3>
+                            <div class="friends-management">
+                                <div class="form-group search-users">
+                                    <label for="user-search-input">Procurar Usuários:</label>
+                                    <input type="text" id="user-search-input" placeholder="Digite o nome de usuário...">
+                                    <button class="primary-button" id="search-users-button">Procurar</button>
+                                </div>
+                                <div id="user-search-results" class="search-results-grid">
+                                    <p class="empty-message">Procure por usuários para adicionar como amigo.</p>
+                                </div>
+
+                                <h4>Pedidos de Amizade Recebidos</h4>
+                                <div id="incoming-requests" class="requests-grid">
+                                    <p class="empty-message">Nenhum pedido de amizade recebido.</p>
+                                </div>
+
+                                <h4>Pedidos de Amizade Enviados</h4>
+                                <div id="outgoing-requests" class="requests-grid">
+                                    <p class="empty-message">Nenhum pedido de amizade enviado.</p>
+                                </div>
+
+                                <h4>Seus Amigos</h4>
+                                <div class="friends-grid" id="friends-list">
+                                    <p class="empty-message">Nenhum amigo ainda.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="favorites-tab" class="tab-panel">
+                            <h3>Meus Jogos Favoritos</h3>
+                            <div class="games-grid" id="favorite-games-list">
+                                <p class="empty-message">Nenhum jogo favorito ainda.</p>
+                            </div>
+                        </div>
+
+                        <div id="messages-tab" class="tab-panel">
+                            <h3>Mensagens</h3>
+                            <div class="messages-list" id="messages-container">
+                                <p class="empty-message">Nenhuma mensagem nova.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="color-picker-group">
-                    <label for="arm-color">Arms</label>
-                    <input type="color" id="arm-color" value="#FAD417">
+            </section>
+
+            <!-- Add Community Section -->
+            <section id="community-section" class="hidden">
+                <div class="community-header">
+                    <button class="back-button" onclick="hideCommunity()">← Voltar</button>
+                    <h2>Comunidade Rogold</h2>
+                    <button class="primary-button" onclick="showCreateBlogForm()">Criar Novo Tópico</button>
                 </div>
-                <div class="color-picker-group">
-                    <label for="leg-color">Legs</label>
-                    <input type="color" id="leg-color" value="#80C91C">
+
+                <div id="create-blog-form" class="auth-section hidden">
+                    <div class="auth-container">
+                        <h3>Criar Novo Tópico</h3>
+                        <form id="blog-create-form">
+                            <div class="form-group">
+                                <label>Título do Tópico:</label>
+                                <input type="text" id="blog-title" required maxlength="100">
+                            </div>
+                            <div class="form-group">
+                                <label>Mensagem Inicial:</label>
+                                <textarea id="blog-message" required maxlength="1000" rows="4"></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="primary-button">Criar Tópico</button>
+                                <button type="button" class="secondary-button" onclick="hideCreateBlogForm()">Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-            </div>
-            <div class="potions-customizer" id="potions-customizer">
-                <h3>Death Sound</h3>
-                <div class="potion-option active" data-sound="classic">Classic Oof</div>
-                <div class="potion-option" data-sound="ouch">Ouch</div>
-            </div>
-             <div class="status-indicator">
-                <span id="online-status">Connecting...</span>
-            </div>
-        </div>
-        <div id="mobile-controls">
-            <div id="joystick-zone"></div>
-            <div id="mobile-buttons">
-                <div class="mobile-camera-controls">
-                     <button id="mobile-rotate-left">⟲</button>
-                     <button id="mobile-rotate-right">⟳</button>
+
+                <div id="blog-list">
+                    <h3>Todos os Tópicos da Comunidade</h3>
+                    <div id="blogs-container">
+                        <p class="empty-message">Nenhum tópico criado ainda. Seja o primeiro!</p>
+                    </div>
                 </div>
-                <button id="mobile-jump-btn">JUMP</button>
+
+                <!-- Blog Detail View -->
+                <div id="blog-detail" class="hidden">
+                    <div class="blog-header">
+                        <button class="back-button" onclick="hideBlogDetail()">← Voltar aos Tópicos</button>
+                        <h3 id="blog-detail-title"></h3>
+                        <p class="blog-meta">Criado por <span id="blog-author"></span> em <span id="blog-date"></span></p>
+                    </div>
+
+                    <div class="blog-messages">
+                        <div id="blog-messages-container"></div>
+                    </div>
+
+                    <div class="auth-section">
+                        <div class="auth-container">
+                            <h4>Adicionar Resposta</h4>
+                            <form id="message-form">
+                                <div class="form-group">
+                                    <textarea id="reply-message" required maxlength="500" rows="3" placeholder="Digite sua mensagem..."></textarea>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" class="primary-button">Enviar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="featured-games" id="featured-games">
+                <h3>Jogos em Destaque</h3>
+                <div class="games-grid">
+                    <div class="game-card" data-game-title="Natural Disaster Survival">
+                        <div class="game-thumbnail">
+                            <img src="thumbnail1.jpg" alt="Natural Disaster Survival Thumbnail">
+                        </div>
+                        <h4>Natural Disaster Survival</h4>
+                        <button class="play-button">Jogar</button>
+                        <button class="favorite-toggle-button">Favoritar</button>
+                    </div>
+                    <div class="game-card" data-game-title="Work at a Pizza Place">
+                        <div class="game-thumbnail">
+                            <img src="thumbnail2.jpg" alt="Work at a Pizza Place Thumbnail">
+                        </div>
+                        <h4>Work at a Pizza Place</h4>
+                        <button class="play-button">Jogar</button>
+                        <button class="favorite-toggle-button">Favoritar</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Remove modals and replace with inline forms -->
+            <section id="login-section" class="auth-section hidden">
+                <div class="auth-container">
+                    <h3>Entre na sua conta Rogold</h3>
+                    <form id="login-form-inline">
+                        <div class="form-group">
+                            <label>Usuário:</label>
+                            <input type="text" id="username-inline" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Senha:</label>
+                            <input type="password" id="password-inline" required>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="primary-button">Entrar</button>
+                            <button type="button" id="switch-to-register-inline" class="secondary-button">Criar Conta</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <section id="register-section" class="auth-section hidden">
+                <div class="auth-container">
+                    <h3>Criar conta Rogold</h3>
+                    <form id="register-form-inline">
+                        <div class="form-group">
+                            <label>Usuário:</label>
+                            <input type="text" id="reg-username-inline" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Senha:</label>
+                            <input type="password" id="reg-password-inline" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Confirmar Senha:</label>
+                            <input type="password" id="reg-confirm-password-inline" required>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="primary-button">Criar Conta</button>
+                            <button type="button" id="switch-to-login-inline" class="secondary-button">Já tenho conta</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <section id="settings-section" class="auth-section hidden">
+                <div class="auth-container">
+                    <h3>Configurações da Conta</h3>
+                    <form id="settings-form-inline">
+                        <div class="form-group">
+                            <label>Usuário Atual:</label>
+                            <input type="text" id="current-username-inline" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label>Novo Usuário:</label>
+                            <input type="text" id="new-username-inline" placeholder="Deixe vazio para manter atual">
+                        </div>
+                        <div class="form-group">
+                            <label>Senha Atual:</label>
+                            <input type="password" id="current-password-inline" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Nova Senha:</label>
+                            <input type="password" id="new-password-inline" placeholder="Deixe vazio para manter atual">
+                        </div>
+                        <div class="form-group">
+                            <label>Confirmar Nova Senha:</label>
+                            <input type="password" id="confirm-new-password-inline" placeholder="Deixe vazio para manter atual">
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="primary-button">Salvar Alterações</button>
+                            <button type="button" id="close-settings-inline" class="secondary-button">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <section id="profile-edit-section" class="auth-section hidden">
+                <div class="auth-container">
+                    <h3>Editar Perfil</h3>
+                    <form id="profile-edit-form-inline">
+                        <div class="form-group">
+                            <label>Biografia:</label>
+                            <textarea id="bio-input-inline" maxlength="500" rows="4" placeholder="Fale sobre você..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Status:</label>
+                            <select id="status-input-inline">
+                                <option value="Online">Online</option>
+                                <option value="Offline">Offline</option>
+                                <option value="Ocupado">Ocupado</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Foto de Perfil:</label>
+                            <input type="file" id="profile-picture-input" accept="image/*">
+                            <button type="button" id="remove-profile-picture" class="secondary-button" style="margin-top: 10px;">Remover Foto</button>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="primary-button">Salvar</button>
+                            <button type="button" id="close-profile-edit-inline" class="secondary-button">Cancelar</button>
+                        </div>
+                    </form>
+                    <div class="form-actions" style="margin-top: 20px; border-top: 1px dashed #808080; padding-top: 15px;">
+                        <button type="button" id="logout-button" class="secondary-button danger">Sair da Conta</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <div class="footer-links">
+                <a href="#">Ajuda</a>
+                <a href="#">Termos de Uso</a>
+                <a href="#">Contato</a>
             </div>
-        </div>
-        <div class="controls-hint">
-            <p>WASD to move • SPACE to jump</p>
-            <p>Q/E to rotate camera</p>
-        </div>
-        <div class="zoom-controls">
-            <button id="zoom-in-btn">+</button>
-            <button id="zoom-out-btn">-</button>
-        </div>
-        <canvas id="game-canvas"></canvas>
+            <p>&copy; 2006 Rogold. Todos os direitos reservados.</p>
+        </footer>
     </div>
-    <div id="player-list-container">
-    <h4>Players</h4>
-    <button id="hide-player-list-btn" class="retro-btn" style="margin-bottom:8px;">Hide</button>
-    <ul id="player-list"></ul>
-</div>
 
-    <!-- Menu Button -->
-    <button id="menu-btn" class="retro-btn">☰ Menu</button>
-
-    <!-- Game Menu Overlay -->
-    <div id="game-menu" class="retro-menu">
-        <h2>Game Menu</h2>
-        <button id="resume-btn" class="retro-btn">Resume</button>
-        <button id="options-btn" class="retro-btn">Options</button>
-        <form action="index.html">
-            <button id="exit-btn" class="retro-btn">Exit</button>
-        </form>
-    </div>
-
-    <button id="equip-tool-btn" class="retro-btn" style="margin-top:10px;">Rocket Launcher (1)</button>
-
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
-    <script type="module" src="game.js"></script>
+    <!-- Link to external JavaScript file -->
+    <script src="index.js"></script>
 </body>
 </html>

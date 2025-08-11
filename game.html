@@ -103,29 +103,11 @@
         <h2>Game Menu</h2>
         <button id="resume-btn" class="retro-btn">Resume</button>
         <button id="options-btn" class="retro-btn">Options</button>
-        <button id="exit-btn" class="retro-btn">Exit</button>
+        <form action="index.html">
+            <button id="exit-btn" class="retro-btn">Exit</button>
+        </form>
     </div>
 
-    <!-- Options Menu Overlay -->
-    <div id="options-menu" class="retro-menu" style="display:none;">
-        <h2>Options</h2>
-        <label>
-            <input type="checkbox" id="music-toggle">
-            Music
-        </label>
-        <br>
-        <label>
-            <input type="checkbox" id="sfx-toggle">
-            Sound Effects
-        </label>
-        <br>
-        <label>
-            <input type="checkbox" id="chat-toggle">
-            Enable Chat
-        </label>
-        <br><br>
-        <button id="options-back-btn" class="retro-btn">Back</button>
-    </div>
     <button id="equip-tool-btn" class="retro-btn" style="margin-top:10px;">Rocket Launcher (1)</button>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
