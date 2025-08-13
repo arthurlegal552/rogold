@@ -567,30 +567,42 @@ class ThreeDViewer {
     if (!this.currentModel) return;
 
     let scaleFactor = 1;
-    let offset = { x: 0, y: 0, z: 0 }; // ✅ sempre começa como objeto
+    let offset = { x: 0, y: 0, z: 0 };     // posição
+    let rotation = { x: 0, y: 0, z: 0 };   // rotação em radianos
 
     if (modelPath.includes('doge_roblox_hat.glb')) {
-        scaleFactor *= 0.8; // Make doge hat larger
-        offset.y = 1.15;    // Move up for larger hat
-        offset.z = 0.05;    // Slightly forward
-        
-    } else if (modelPath.includes('roblox_r_baseball_cap_r6.glb')) {
-        scaleFactor *= 0.8; // Slightly larger for baseball cap
-        offset.y = 1.08;    // Adjust position for cap
+        scaleFactor *= 0.8;
+        offset.y = 1.15;
         offset.z = 0.05;
+        rotation.y = Math.PI * 0.05; // exemplo: gira levemente no eixo Y
+
+    } else if (modelPath.includes('roblox_r_baseball_cap_r6.glb')) {
+        scaleFactor *= 0.8;
+        offset.y = 1.08;
+        offset.z = 0.05;
+        rotation.x = Math.PI * 0.02; // exemplo: inclina um pouco no eixo X
 
     } else if (modelPath.includes('roblox_fedora.glb')) {
-        scaleFactor *= 0.8; // Slightly larger for fedora
-        offset.y = 1.08;    // Adjust position for fedora
+        scaleFactor *= 0.8;
+        offset.y = 1.08;
         offset.z = 0.05;
+        rotation.y = Math.PI * -0.03; // exemplo: vira levemente pro outro lado
     }
 
-    // aplica escala e offset normalmente
+    // aplica escala
     accessoryModel.scale.multiplyScalar(scaleFactor);
+
+    // aplica posição
     accessoryModel.position.x += offset.x;
     accessoryModel.position.y += offset.y;
     accessoryModel.position.z += offset.z;
 
+    // aplica rotação
+    accessoryModel.rotation.x += rotation.x;
+    accessoryModel.rotation.y += rotation.y;
+    accessoryModel.rotation.z += rotation.z;
+
+    // adiciona ao avatar
     this.currentModel.add(accessoryModel);
 }
 
