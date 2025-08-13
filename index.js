@@ -584,7 +584,7 @@ class ThreeDViewer {
                 // or if they need a different visual prominence.
                 if (modelPath.includes('doge_roblox_hat.glb')) {
                     scaleFactor *= 1.5; // Make doge hat larger
-                    offset.y = avatarHeight * 2; // topo da cabeça
+                    offset.y = avatarHeight * 0.8; // topo da cabeça
                     offset.z = 0.05; // Slightly forward
                 } else if (modelPath.includes('roblox_r_baseball_cap_r6.glb')) {
                     scaleFactor *= 1.2; // Slightly larger for baseball cap
