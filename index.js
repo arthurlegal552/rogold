@@ -564,56 +564,35 @@ class ThreeDViewer {
 
     // New: Positions and scales accessories relative to the avatar
     _positionAccessoryOnAvatar(accessoryModel, modelPath, accessoryType) {
-        let offset = { x: 0, y: 0, z: 0 };
-        const avatarHeight = 0.8; // mesmo targetHeight do avatar
+    if (!this.currentModel) return;
+
+    let scaleFactor = 1;
+    let offset = { x: 0, y: 0, z: 0 }; // ✅ sempre começa como objeto
+
+    if (modelPath.includes('doge_roblox_hat.glb')) {
+        scaleFactor *= 1.5; // Make doge hat larger
+        offset.y = 1.15;    // Move up for larger hat
+        offset.z = 0.05;    // Slightly forward
         
-        // Calculate the bounding box for the raw accessory model AFTER intrinsic transforms
-        const originalBox = new THREE.Box3().setFromObject(accessoryModel);
-        const originalSize = originalBox.getSize(new THREE.Vector3());
+    } else if (modelPath.includes('roblox_r_baseball_cap_r6.glb')) {
+        scaleFactor *= 1.2; // Slightly larger for baseball cap
+        offset.y = 1.08;    // Adjust position for cap
+        offset.z = 0.05;
 
-        // Desired visual height for a hat on a 1-unit player (adjust as needed for aesthetics)
-        let targetVisualHeight = 0.2; 
-
-        if (accessoryType === 'hat') {
-            // Base Y position for hats on a 1-unit tall avatar (assuming 1 unit is head top)
-            let offset = { x: 0, y: 0, z: 0 };
-
-            if (originalSize.y > 0) {
-                let scaleFactor = targetVisualHeight / originalSize.y;
-
-                // Apply model-specific adjustments if some hats are intrinsically larger/smaller
-                // or if they need a different visual prominence.
-                if (modelPath.includes('doge_roblox_hat.glb')) {
-                    const avatarBox = new THREE.Box3().setFromObject(this.currentModel);
-                    const avatarHeight = avatarBox.getSize(new THREE.Vector3()).y;
-                    scaleFactor *= 1.5; // Make doge hat larger
-                    offset.y = 2;
-                    offset.z = 0.8; // Slightly forward
-                    offset.y = avatarHeight + (avatarHeight * 0.05); // 5% acima do topo
-                    
-                } else if (modelPath.includes('roblox_r_baseball_cap_r6.glb')) {
-                    scaleFactor *= 1.2; // Slightly larger for baseball cap
-                    offset.y = 1.08; // Adjust position for cap
-                    offset.z = 0.05;
-                } else if (modelPath.includes('roblox_fedora.glb')) {
-                    scaleFactor *= 1.1; // Slightly larger for fedora
-                    offset.y = 1.08; // Adjust position for fedora
-                    offset.z = 0.05;
-                }
-                
-                accessoryModel.scale.multiplyScalar(scaleFactor);
-            }
-        }
-        
-        // After scaling, re-center the accessory if its pivot isn't at the bottom
-        const scaledBox = new THREE.Box3().setFromObject(accessoryModel);
-        const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
-        
-        // Adjust position so the base of the *scaled* accessory sits correctly relative to the target offset
-        accessoryModel.position.x = offset.x - scaledCenter.x;
-        accessoryModel.position.y = offset.y - scaledBox.min.y; // Align bottom of accessory with target Y
-        accessoryModel.position.z = offset.z - scaledCenter.z;
+    } else if (modelPath.includes('roblox_fedora.glb')) {
+        scaleFactor *= 1.1; // Slightly larger for fedora
+        offset.y = 1.08;    // Adjust position for fedora
+        offset.z = 0.05;
     }
+
+    // aplica escala e offset normalmente
+    accessoryModel.scale.multiplyScalar(scaleFactor);
+    accessoryModel.position.x += offset.x;
+    accessoryModel.position.y += offset.y;
+    accessoryModel.position.z += offset.z;
+
+    this.currentModel.add(accessoryModel);
+}
 
     destroy() {
         this.stopAnimation();
