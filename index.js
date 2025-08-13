@@ -523,7 +523,7 @@ class ThreeDViewer {
         const newCenter = newBox.getCenter(new THREE.Vector3());
 
         // Apply a universal scale to make models roughly 'targetHeight' tall for consistent viewing
-        const targetHeight = 1.0; // Changed from 2.0 to 1.0
+        const targetHeight = 0.8; // Changed from 2.0 to 1.0
         if (newSize.y > 0) { // Avoid division by zero
             const scaleFactor = targetHeight / newSize.y;
             model.scale.multiplyScalar(scaleFactor);
