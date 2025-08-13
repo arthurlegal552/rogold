@@ -576,7 +576,7 @@ class ThreeDViewer {
 
         if (accessoryType === 'hat') {
             // Base Y position for hats on a 1-unit tall avatar (assuming 1 unit is head top)
-            offset = 2;
+            offset = (avatarHeight.y * 0.2);
 
             if (originalSize.y > 0) {
                 let scaleFactor = targetVisualHeight / originalSize.y;
