@@ -570,17 +570,17 @@ class ThreeDViewer {
     let offset = { x: 0, y: 0, z: 0 }; // ✅ sempre começa como objeto
 
     if (modelPath.includes('doge_roblox_hat.glb')) {
-        scaleFactor *= 1.5; // Make doge hat larger
+        scaleFactor *= 0.8; // Make doge hat larger
         offset.y = 1.15;    // Move up for larger hat
         offset.z = 0.05;    // Slightly forward
         
     } else if (modelPath.includes('roblox_r_baseball_cap_r6.glb')) {
-        scaleFactor *= 1.2; // Slightly larger for baseball cap
+        scaleFactor *= 0.8; // Slightly larger for baseball cap
         offset.y = 1.08;    // Adjust position for cap
         offset.z = 0.05;
 
     } else if (modelPath.includes('roblox_fedora.glb')) {
-        scaleFactor *= 1.1; // Slightly larger for fedora
+        scaleFactor *= 0.8; // Slightly larger for fedora
         offset.y = 1.08;    // Adjust position for fedora
         offset.z = 0.05;
     }
