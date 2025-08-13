@@ -523,7 +523,7 @@ class ThreeDViewer {
         const newCenter = newBox.getCenter(new THREE.Vector3());
 
         // Apply a universal scale to make models roughly 'targetHeight' tall for consistent viewing
-        const targetHeight = 0.8; // Changed from 2.0 to 1.0
+        const targetHeight = 0.5; // Changed from 2.0 to 1.0
         if (newSize.y > 0) { // Avoid division by zero
             const scaleFactor = targetHeight / newSize.y;
             model.scale.multiplyScalar(scaleFactor);
@@ -565,6 +565,7 @@ class ThreeDViewer {
     // New: Positions and scales accessories relative to the avatar
     _positionAccessoryOnAvatar(accessoryModel, modelPath, accessoryType) {
         let offset = { x: 0, y: 0, z: 0 };
+        const avatarHeight = 0.8; // mesmo targetHeight do avatar
         
         // Calculate the bounding box for the raw accessory model AFTER intrinsic transforms
         const originalBox = new THREE.Box3().setFromObject(accessoryModel);
@@ -575,7 +576,7 @@ class ThreeDViewer {
 
         if (accessoryType === 'hat') {
             // Base Y position for hats on a 1-unit tall avatar (assuming 1 unit is head top)
-            offset = { x: 0, y: 1.0, z: 0 }; 
+            offset = avatarHeight; // topo da cabeça
 
             if (originalSize.y > 0) {
                 let scaleFactor = targetVisualHeight / originalSize.y;
