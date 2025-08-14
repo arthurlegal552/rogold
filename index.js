@@ -575,9 +575,9 @@ class ThreeDViewer {
         scaleFactor *= 0.3;
         offset.y = 1.15;
         offset.z = 0.05;
-        rotation.y = 0;         // frente
+        rotation.y = -0.5;         // frente
         rotation.x = 0;         // garante que não está inclinado
-        rotation.z = 0.5;         // garante que não está rotacionado lateral
+        rotation.z = 0;         // garante que não está rotacionado lateral
     } else if (modelPath.includes('roblox_r_baseball_cap_r6.glb')) {
         scaleFactor *= 0.3;
         offset.y = 1.08;
