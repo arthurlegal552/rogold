@@ -45,7 +45,7 @@ let controlOverride = localStorage.getItem('controlOverride'); // 'pc', 'mobile'
 
 let renderTarget, postScene, postCamera;
 
-let socket;
+let socket = io();
 let otherPlayers = {};
 let playerId;
 
