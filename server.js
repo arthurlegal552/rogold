@@ -61,6 +61,16 @@ io.on('connection', (socket) => {
             legs: '#80C91C'
         }
     };
+
+    io.on("connection", (socket) => {
+    socket.on("equipTool", (data) => {
+        socket.broadcast.emit("remoteEquip", { playerId: socket.id, tool: data.tool });
+    });
+
+    socket.on("unequipTool", (data) => {
+        socket.broadcast.emit("remoteUnequip", { playerId: socket.id, tool: data.tool });
+    });
+});
     
     // Notify other players about new player
     socket.broadcast.emit('playerJoined', players[socket.id]);
