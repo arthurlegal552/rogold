@@ -627,45 +627,6 @@ socket.on("remoteUnequip", (data) => {
     remotePlayer.userData.equipAnimProgress = 0;
 });
 
-socket.on("remoteLaunchRocket", (data) => {
-    const rocketGeometry = new THREE.BoxGeometry(1, 1, 1);
-    const textureLoader = new THREE.TextureLoader();
-    const texture = textureLoader.load('roblox-stud.png');
-    const rocketMaterial = new THREE.MeshBasicMaterial({
-        map: texture,
-        color: new THREE.Color('#89CFF0'),
-        blending: THREE.MultiplyBlending,
-        transparent: true
-    });
-    const rocket = new THREE.Mesh(rocketGeometry, rocketMaterial);
-
-    rocket.position.fromArray(data.position);
-    const direction = new THREE.Vector3().fromArray(data.direction).normalize();
-    rocket.lookAt(new THREE.Vector3().fromArray(data.position).add(direction.clone().multiplyScalar(data.maxDistance)));
-
-    scene.add(rocket);
-
-    const speed = 0.07;
-    let travelledDistance = 0;
-    const maxTravel = data.maxDistance;
-
-    function animateRocket() {
-        rocket.position.add(direction.clone().multiplyScalar(speed));
-        travelledDistance += speed;
-
-        if (travelledDistance >= maxTravel) {
-            createExplosion(rocket.position);
-            scene.remove(rocket);
-            return;
-        }
-
-        requestAnimationFrame(animateRocket);
-    }
-
-    animateRocket();
-});
-
-
 
     socket.on('stopDance', (dancerId) => {
         if (dancerId && otherPlayers[dancerId]) {
@@ -1505,7 +1466,7 @@ function equipRocketLauncher() {
 }
 
 function launchRocket() {
-    if (!canUseRocketLauncher()) return;
+    if (equippedTool !== 'rocketLauncher' || !canShoot) return;
 
     canShoot = false;
     setTimeout(() => { canShoot = true; }, cooldownTime);
@@ -1525,8 +1486,6 @@ function launchRocket() {
             direction: direction.toArray(),
             maxDistance: maxDist
         });
-    }
-
 
     rocket.lookAt(targetPoint);
     scene.add(rocket);
