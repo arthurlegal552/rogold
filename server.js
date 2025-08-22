@@ -71,6 +71,16 @@ io.on('connection', (socket) => {
         socket.broadcast.emit("remoteUnequip", { playerId: socket.id, tool: data.tool });
     });
 });
+
+socket.on("launchRocket", (data) => {
+    io.emit("remoteLaunchRocket", {
+        playerId: socket.id,
+        position: data.position,
+        direction: data.direction,
+        maxDistance: data.maxDistance
+    });
+});
+
     
     // Notify other players about new player
     socket.broadcast.emit('playerJoined', players[socket.id]);
