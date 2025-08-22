@@ -1525,6 +1525,7 @@ function launchRocket() {
             direction: direction.toArray(),
             maxDistance: maxDist
         });
+    }
 
     rocket.lookAt(targetPoint);
     scene.add(rocket);
@@ -1537,7 +1538,6 @@ function launchRocket() {
     const speed = 0.070;
     let travelledDistance = 0;
     const maxTravel = startPos.distanceTo(targetPoint);
-}
 
     /**
  * Cria uma explosão visual e física em uma determinada posição.
