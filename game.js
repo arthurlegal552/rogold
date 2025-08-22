@@ -1670,7 +1670,7 @@ function animate() {
         remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, equipTargetRotation, t);
         if (t >= 1) {
             remotePlayer.userData.isEquipping = false;
-            remotePlayer.rightArm.rotation.x = equipTargetRotation;
+            remotePlayer.rightArm.rotation.x = -Math.PI / 2; // Keep arm straight
         }
     }
 
