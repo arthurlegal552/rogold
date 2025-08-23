@@ -463,7 +463,7 @@ body {
 .toolbox {
   position: fixed;
   top: 80%;
-  left: 100px;
+  left: 300px;
   transform: translateY(-50%);
   display: flex;
   flex-direction: column;
