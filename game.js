@@ -1437,6 +1437,7 @@ let equippedTool = null;
 let rocketLauncherModel = null;
 let isEquipping = false;
 let equipAnimProgress = 0;
+let isUnequipping = false;
 let unequipAnimProgress = 0;
 const equipAnimDuration = 0.25; // seconds
 let equipTargetRotation = -Math.PI / 2;
@@ -1582,11 +1583,12 @@ function createExplosion(position) {
 
 // Unequip function
 function unequipTool() {
-    if (!rocketLauncherModel || equippedTool !== 'rocketLauncher') return;
+    if (!rocketLauncherModel || equippedTool !== 'rocketLauncher' || isUnequipping) return;
     player.rightArm.remove(rocketLauncherModel);
     scene.add(rocketLauncherModel);
     rocketLauncherModel.visible = false;
     equippedTool = null;
+    isUnequipping = true;
     player.rightArm.rotation.x = 0; // Reset arm
     document.getElementById('equip-tool-btn').classList.remove('equipped');
 }
