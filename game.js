@@ -1588,6 +1588,7 @@ function unequipTool() {
     scene.add(rocketLauncherModel);
     rocketLauncherModel.visible = false;
     equippedTool = null;
+    isUnequipping = true;
     player.rightArm.rotation.x = 0; // Reset arm
     document.getElementById('equip-tool-btn').classList.remove('equipped');
 }
