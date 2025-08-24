@@ -624,7 +624,7 @@ socket.on("remoteUnequip", (data) => {
     if (!remotePlayer) return;
 
     remotePlayer.userData.isUnequipping = true;
-    remotePlayer.userData.unequipAnimProgress = 0; // Corrigido!
+    remotePlayer.userData.equipAnimProgress = 0;
 });
 
 
@@ -1672,18 +1672,18 @@ function animate() {
 
     // UNEQUIP animação
     if (remotePlayer.userData.isUnequipping) {
-        remotePlayer.userData.unequipAnimProgress += delta;
-        const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
-        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
-        if (t >= 1) {
-            remotePlayer.userData.isUnequipping = false;
-            remotePlayer.rightArm.rotation.x = 0;
+    remotePlayer.userData.unequipAnimProgress += delta;
+    const t = Math.min(remotePlayer.userData.unequipAnimProgress / equipAnimDuration, 1);
+    remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
+    if (t >= 1) {
+        remotePlayer.userData.isUnequipping = false;
+        remotePlayer.rightArm.rotation.x = 0;
 
-            // remove modelo da mão
-            if (model.parent) model.parent.remove(model);
-            model.visible = false;
-        }
+        // Remove modelo da mão
+        if (model.parent) model.parent.remove(model);
+        model.visible = false;
     }
+}
 }
 
 
