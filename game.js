@@ -1692,7 +1692,6 @@ if (remotePlayer.userData.isUnequipping) {
         remotePlayer.userData.equippedTool = null;
     }
 }
-}
 
 
     // Step physics world
