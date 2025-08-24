@@ -1437,6 +1437,7 @@ let equippedTool = null;
 let rocketLauncherModel = null;
 let isEquipping = false;
 let equipAnimProgress = 0;
+let unequipAnimProgress = 0;
 const equipAnimDuration = 0.25; // seconds
 let equipTargetRotation = -Math.PI / 2;
 
@@ -1674,7 +1675,7 @@ function animate() {
 
     // UNEQUIP animação
     if (remotePlayer.userData.isUnequipping) {
-        remotePlayer.userData.equipAnimProgress += delta;
+        remotePlayer.userData.unequipAnimProgress += delta;
         const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
         remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
         if (t >= 1) {
