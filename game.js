@@ -1657,20 +1657,34 @@ function animate() {
         }
     }
 
-    if (isUnequipping) {
-    unequipAnimProgress += delta;
-    const t = Math.min(unequipAnimProgress / equipAnimDuration, 1);
-    player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, 0, t);
+    for (const id in otherPlayers) {
+    const remotePlayer = otherPlayers[id];
+    const model = remotePlayer.userData.rocketLauncherModel;
 
-    if (t >= 1) {
-        player.rightArm.rotation.x = 0;
-        isUnequipping = false;
+    if (!model) continue;
 
-        // remover modelo da mão
-        if (rocketLauncherModel.parent) rocketLauncherModel.parent.remove(rocketLauncherModel);
-        rocketLauncherModel.visible = false;
+    // Equip animação
+    if (remotePlayer.userData.isEquipping) {
+        remotePlayer.userData.equipAnimProgress += delta;
+        const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
+        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, equipTargetRotation, t);
+        if (t >= 1) remotePlayer.userData.isEquipping = false;
     }
-}
+
+    // Unequip animação
+    if (remotePlayer.userData.isUnequipping) {
+        remotePlayer.userData.unequipAnimProgress += delta;
+        const t = Math.min(remotePlayer.userData.unequipAnimProgress / equipAnimDuration, 1);
+        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
+        if (t >= 1) {
+            remotePlayer.userData.isUnequipping = false;
+            remotePlayer.rightArm.rotation.x = 0;
+
+            // Remove modelo da mão
+            if (model.parent) model.parent.remove(model);
+            model.visible = false;
+        }
+    }
 }
 
 
