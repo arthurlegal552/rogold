@@ -1896,6 +1896,22 @@ function animate() {
     } else if (equippedTool === 'rocketLauncher') {
         player.rightArm.rotation.x = equipTargetRotation;
     }
+
+    if (isUnequipping) {
+    unequipAnimProgress += delta;
+    const t = Math.min(unequipAnimProgress / equipAnimDuration, 1);
+    player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, 0, t);
+
+    if (t >= 1) {
+        player.rightArm.rotation.x = 0;
+        isUnequipping = false;
+
+        // Agora remove o modelo da mão
+        if (rocketLauncherModel.parent) player.rightArm.remove(rocketLauncherModel);
+        scene.add(rocketLauncherModel);
+        rocketLauncherModel.visible = false;
+    }
+}
 }
 
 // Chat message handling
