@@ -593,6 +593,14 @@ function initSocket() {
         }
     });
 
+    socket.on('spawnRocket', (data) => {
+    const start = new THREE.Vector3(data.start.x, data.start.y, data.start.z);
+    const dir = new THREE.Vector3(data.dir.x, data.dir.y, data.dir.z).normalize();
+
+    createRocket(start, dir);
+});
+
+
     socket.on('dance', (dancerId) => {
         if (dancerId && otherPlayers[dancerId]) {
             otherPlayers[dancerId].isDancing = true;
@@ -1458,6 +1466,48 @@ function launchRocket() {
 
     const direction = raycaster.ray.direction.clone().normalize();
     const targetPoint = startPos.clone().add(direction.multiplyScalar(maxDistance));
+
+    if (socket && socket.connected) {
+        socket.emit('launchRocket', {
+            start: { x: startPos.x, y: startPos.y, z: startPos.z },
+            dir: { x: direction.x, y: direction.y, z: direction.z }
+        });
+    }
+
+    function createRocket(startPos, direction) {
+    const rocketGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const textureLoader = new THREE.TextureLoader();
+    const texture = textureLoader.load('roblox-stud.png');
+    const rocketMaterial = new THREE.MeshBasicMaterial({
+        map: texture,
+        color: new THREE.Color('#89CFF0'),
+        blending: THREE.MultiplyBlending,
+        transparent: true
+    });
+
+    const rocket = new THREE.Mesh(rocketGeometry, rocketMaterial);
+    rocket.position.copy(startPos);
+    rocket.lookAt(startPos.clone().add(direction));
+    scene.add(rocket);
+
+    const speed = 0.07;
+    let travelledDistance = 0;
+    const maxTravel = 200;
+
+    function animateRocket() {
+        rocket.position.add(direction.clone().multiplyScalar(speed));
+        travelledDistance += speed;
+
+        if (travelledDistance >= maxTravel) {
+            createExplosion(rocket.position);
+            scene.remove(rocket);
+            return;
+        }
+
+        requestAnimationFrame(animateRocket);
+    }
+    animateRocket();
+}
 
     rocket.lookAt(targetPoint);
 
