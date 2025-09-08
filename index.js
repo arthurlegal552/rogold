@@ -325,8 +325,18 @@ class ProfileManager {
             return { success: false, message: 'Você não possui este item.' };
         }
         
-        profile.equippedItems[itemType] = itemId; 
+        profile.equippedItems[itemType] = itemId;
         this.saveProfiles();
+        
+        // Quando o usuário equipa um item no site:
+        localStorage.setItem('rogold_equipped_hat', itemId); // itemId = 'hat_red', 'hat_doge', etc.
+        window.dispatchEvent(new Event('rogold_equipped_hat_changed'));
+
+        // NOVO: envie para o servidor
+        if (window.socket && window.socket.connected) {
+            window.socket.emit('equipHat', { hatId: itemId });
+        }
+        
         return { success: true, message: 'Item equipado com sucesso!' };
     }
 

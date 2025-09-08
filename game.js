@@ -367,11 +367,17 @@ function createRemotePlayer(headModel, playerData) {
     const playerGroup = createPlayer(headModel);
     playerGroup.position.set(playerData.x, playerData.y, playerData.z);
     playerGroup.rotation.y = playerData.rotation;
-    // Set initial network data targets for interpolation
     playerGroup.userData.targetPosition = new THREE.Vector3(playerData.x, playerData.y, playerData.z);
     playerGroup.userData.targetQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, playerData.rotation, 0));
-
     updatePlayerColors(playerGroup, playerData.colors);
+
+    // Salve o nickname para usar na lista
+    playerGroup.userData.nickname = playerData.nickname || playerData.id;
+
+    // Coloque o chapéu se tiver
+    if (playerData.hatId) {
+        addHatToPlayer(playerGroup, playerData.hatId);
+    }
     return playerGroup;
 }
 
@@ -390,10 +396,18 @@ function initSocket() {
     const statusEl = document.getElementById('online-status');
     
     socket.on('connect', () => {
-        console.log('Connected to server');
         playerId = socket.id;
-        statusEl.textContent = `Online (${Object.keys(otherPlayers).length + 1} players)`;
-        statusEl.className = 'connected';
+        // Pegue nickname do localStorage
+        const nickname = localStorage.getItem('rogold_currentUser') || 'Visitante';
+        socket.emit('setNickname', nickname);
+
+        // Pegue chapéu equipado do localStorage
+        const hatId = localStorage.getItem('rogold_equipped_hat');
+        if (hatId) {
+            socket.emit('equipHat', { hatId });
+            // Coloque o chapéu no seu player local
+            addHatToPlayer(player, hatId);
+        }
     });
     
     socket.on('connect_error', (error) => {
@@ -602,29 +616,43 @@ function initSocket() {
 
     // Quando outro player equipa
 socket.on("remoteEquip", (data) => {
-    const remotePlayer = otherPlayers[data.playerId];
-    if (!remotePlayer) return;
-
-    remotePlayer.userData.equippedTool = data.tool;
-    remotePlayer.userData.isEquipping = true;
-    remotePlayer.userData.equipAnimProgress = 0;
-
-    // Cria modelo na mão do outro player (se ainda não existir)
-    if (!remotePlayer.userData.rocketLauncherModel) {
-        const model = rocketLauncherModel.clone();
-        model.visible = true;
-        remotePlayer.rightArm.add(model);
-        remotePlayer.userData.rocketLauncherModel = model;
+    if (data.playerId === playerId) {
+        // Animate equip for local player
+        isEquipping = true;
+        equipAnimProgress = 0;
+        equippedTool = data.tool;
+        // (You may want to call equipRocketLauncher() logic here if needed)
+    } else {
+        // Animate equip for remote player
+        const remotePlayer = otherPlayers[data.playerId];
+        if (!remotePlayer) return;
+        remotePlayer.userData.isEquipping = true;
+        remotePlayer.userData.equipAnimProgress = 0;
+        remotePlayer.userData.equippedTool = data.tool;
+        // Attach model if needed
+        if (!remotePlayer.userData.rocketLauncherModel && rocketLauncherModel) {
+            const model = rocketLauncherModel.clone();
+            model.visible = true;
+            remotePlayer.rightArm.add(model);
+            remotePlayer.userData.rocketLauncherModel = model;
+        }
     }
 });
 
-// Quando outro player desequipa
 socket.on("remoteUnequip", (data) => {
-    const remotePlayer = otherPlayers[data.playerId];
-    if (!remotePlayer) return;
-
-    remotePlayer.userData.isUnequipping = true;
-    remotePlayer.userData.equipAnimProgress = 0;
+    if (data.playerId === playerId) {
+        // Animate unequip for local player
+        isUnequipping = true;
+        unequipAnimProgress = 0;
+        equippedTool = null;
+    } else {
+        // Animate unequip for remote player
+        const remotePlayer = otherPlayers[data.playerId];
+        if (!remotePlayer) return;
+        remotePlayer.userData.isUnequipping = true;
+        remotePlayer.userData.unequipAnimProgress = 0;
+        remotePlayer.userData.equippedTool = null;
+    }
 });
 
 
@@ -633,30 +661,46 @@ socket.on("remoteUnequip", (data) => {
             otherPlayers[dancerId].isDancing = false;
         }
     });
+
+    // On rocket launch
+socket.on('launchRocket', data => {
+    // Broadcast to all clients
+    io.emit('spawnRocket', data);
+});
+
+// On player hit
+socket.on('playerHit', ({ killer, victim }) => {
+    // Optionally, broadcast death or update scores
+    io.emit('playerDied', { killer, victim });
+});
+
+// Atualiza o chapéu do player remoto
+socket.on('playerHatChanged', ({ playerId: changedId, hatId }) => {
+    if (otherPlayers[changedId]) {
+        addHatToPlayer(otherPlayers[changedId], hatId);
+    }
+});
 }
 
 function updatePlayerList() {
     const playerList = document.getElementById('player-list');
     if (!playerList) return;
-    // Combine your player and otherPlayers
-    const allPlayers = [playerId, ...Object.keys(otherPlayers)];
     playerList.innerHTML = '';
-    allPlayers.forEach(id => {
+
+    // Adicione você mesmo
+    const myNickname = localStorage.getItem('rogold_currentUser') || 'Você';
+    const liMe = document.createElement('li');
+    liMe.textContent = myNickname;
+    playerList.appendChild(liMe);
+
+    // Adicione os outros jogadores
+    Object.values(otherPlayers).forEach(remotePlayer => {
         const li = document.createElement('li');
-        li.textContent = id === playerId ? 'You' : id;
+        li.textContent = remotePlayer.userData.nickname || remotePlayer.userData.playerId || 'Jogador';
         playerList.appendChild(li);
     });
 }
 
-// Call updatePlayerList() whenever a player joins/leaves
-if (typeof socket !== 'undefined' && socket) {
-    socket.on('playerJoined', () => updatePlayerList());
-    socket.on('playerLeft', () => updatePlayerList());
-    socket.on('connect', () => updatePlayerList());
-    socket.on('disconnect', () => updatePlayerList());
-}
-
-// Also call updatePlayerList() after you update otherPlayers in your code
 function initGame() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);
@@ -887,6 +931,23 @@ function initGame() {
         rocketLauncherModel.visible = false;
         scene.add(rocketLauncherModel);
     });
+}
+
+// Adicione o corpo físico do player:
+function ensurePlayerPhysicsBody() {
+    if (!player.userData.body) {
+        const playerShape = new CANNON.Box(new CANNON.Vec3(1, 3, 1));
+        const playerBody = new CANNON.Body({
+            mass: 0,
+            position: new CANNON.Vec3(player.position.x, player.position.y, player.position.z),
+            shape: playerShape,
+            collisionFilterGroup: 1,
+            collisionFilterMask: 2
+        });
+        playerBody.userData = { mesh: player, isPlayer: true, playerId: playerId };
+        physicsWorld.addBody(playerBody);
+        player.userData.body = playerBody;
+    }
 }
 
 function createBaseplate() {
@@ -1448,24 +1509,18 @@ function equipRocketLauncher() {
     isEquipping = true;
     equipAnimProgress = 0;
 
-    // Remove from scene if already present elsewhere
     scene.remove(rocketLauncherModel);
-
-    // Attach to right arm pivot (player.rightArm)
     player.rightArm.add(rocketLauncherModel);
-
-    // Position at the top of the arm (like a hand)
-    rocketLauncherModel.position.set(0, -1, 0.5); // y: -1 is top of arm, z: 0.5 is in front
-    rocketLauncherModel.rotation.set(1.5, Math.PI / 2, 0); // Rotate 90 degrees around Y axis
-
+    rocketLauncherModel.position.set(0, -1, 0.5);
+    rocketLauncherModel.rotation.set(1.5, Math.PI / 2, 0);
     rocketLauncherModel.visible = true;
     equippedTool = 'rocketLauncher';
 
+    // Emit to server for all clients to animate
     if (socket && socket.connected) {
         socket.emit("equipTool", { tool: "rocketLauncher" });
     }
 
-    // Highlight button
     document.getElementById('equip-tool-btn').classList.add('equipped');
 }
 
@@ -1475,113 +1530,28 @@ function launchRocket() {
     canShoot = false;
     setTimeout(() => { canShoot = true; }, cooldownTime);
 
-    const rocketGeometry = new THREE.BoxGeometry(1, 1, 1);
-    const textureLoader = new THREE.TextureLoader();
-    const texture = textureLoader.load('roblox-stud.png');
-    const rocketMaterial = new THREE.MeshBasicMaterial({map: texture,
-  color: new THREE.Color('#89CFF0'),
-  blending: THREE.MultiplyBlending,
-  transparent: true});
-    const rocket = new THREE.Mesh(rocketGeometry, rocketMaterial);
-
+    // Get direction from camera and mouse
+    raycaster.setFromCamera(mouse, camera);
+    const direction = raycaster.ray.direction.clone().normalize();
     const startPos = new THREE.Vector3();
     rocketLauncherModel.getWorldPosition(startPos);
-    rocket.position.copy(startPos);
 
-    raycaster.setFromCamera(mouse, camera);
+    // Emit to server for all players to spawn the rocket
+    if (socket && socket.connected) {
+        socket.emit('launchRocket', {
+            position: { x: startPos.x, y: startPos.y, z: startPos.z },
+            direction: { x: direction.x, y: direction.y, z: direction.z },
+            owner: playerId
+        });
+    }
 
-    const direction = raycaster.ray.direction.clone().normalize();
-    const targetPoint = startPos.clone().add(direction.multiplyScalar(maxDistance));
-
-    rocket.lookAt(targetPoint);
-
-    scene.add(rocket);
-
+    // Optionally, play launch sound locally
     if (launchSound && launchSound.buffer) {
         if (launchSound.isPlaying) launchSound.stop();
         launchSound.play();
     }
-
-    const speed = 0.070;
-    let travelledDistance = 0;
-    const maxTravel = startPos.distanceTo(targetPoint);
-
-    /**
- * Cria uma explosão visual e física em uma determinada posição.
- * @param {THREE.Vector3} position - O ponto central da explosão.
- */
-function createExplosion(position) {
-    // 1. Tocar o som da explosão
-    if (explosionSound && explosionSound.buffer) {
-        if (explosionSound.isPlaying) explosionSound.stop();
-        if (launchSound.isPlaying) launchSound.stop();
-        explosionSound.play();
-    }
-
-    // 2. Criar partículas visuais
-    const particleCount = 30;
-    const particleMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0xFFD700,
-        blending: THREE.MultiplyBlending,
-        transparent: true
-    });
-
-    for (let i = 0; i < particleCount; i++) {
-        const particleGeometry = new THREE.SphereGeometry(0.2, 8, 8);
-        const particle = new THREE.Mesh(particleGeometry, particleMaterial);
-        particle.position.copy(position);
-
-        const velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 25,
-            (Math.random() * 25),
-            (Math.random() - 0.5) * 25
-        );
-
-        particle.userData = {
-            velocity: velocity,
-            creationTime: performance.now()
-        };
-
-        scene.add(particle);
-        explodingParticles.push(particle);
-    }
-
-    // 3. Aplicar força física (impulso) a objetos próximos
-    const explosionRadius = 20;
-    const explosionStrength = 150;
-
-    physicsWorld.bodies.forEach(body => {
-        if (body.type === CANNON.Body.STATIC) return;
-
-        const bodyPosition = new CANNON.Vec3().copy(body.position);
-        const distanceVec = bodyPosition.vsub(new CANNON.Vec3(position.x, position.y, position.z));
-        const distance = distanceVec.length();
-
-        if (distance < explosionRadius) {
-            const strength = explosionStrength * (1 - distance / explosionRadius);
-            const direction = distanceVec.unit();
-            body.applyImpulse(direction.scale(strength), bodyPosition);
-        }
-    });
-}
-    
-    function animateRocket() {
-        rocket.position.add(direction.clone().multiplyScalar(speed));
-        travelledDistance += speed;
-
-        if (travelledDistance >= maxTravel) {
-            createExplosion(rocket.position);
-            scene.remove(rocket);
-            return;
-        }
-
-        requestAnimationFrame(animateRocket);
-    }
-
-    animateRocket();
 }
 
-// Unequip function
 function unequipTool() {
     if (!rocketLauncherModel || equippedTool !== 'rocketLauncher') return;
     player.rightArm.remove(rocketLauncherModel);
@@ -1590,6 +1560,11 @@ function unequipTool() {
     equippedTool = null;
     player.rightArm.rotation.x = 0; // Reset arm
     document.getElementById('equip-tool-btn').classList.remove('equipped');
+
+    // Emit to server for all clients to animate
+    if (socket && socket.connected) {
+        socket.emit("unequipTool", { tool: "rocketLauncher" });
+    }
 }
 
 // Button and keyboard events
@@ -1615,6 +1590,100 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+socket.on('spawnRocket', (data) => {
+    spawnRocket(
+        new THREE.Vector3(data.position.x, data.position.y, data.position.z),
+        new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z),
+        data.owner
+    );
+});
+
+
+
+function spawnRocket(startPos, direction, ownerId) {
+    const rocketGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const textureLoader = new THREE.TextureLoader();
+    const texture = textureLoader.load('roblox-stud.png');
+    const rocketMaterial = new THREE.MeshBasicMaterial({
+        map: texture,
+        color: new THREE.Color('#89CFF0'),
+        blending: THREE.MultiplyBlending,
+        transparent: true
+    });
+    const rocket = new THREE.Mesh(rocketGeometry, rocketMaterial);
+    rocket.position.copy(startPos);
+    rocket.lookAt(startPos.clone().add(direction));
+    scene.add(rocket);
+
+    // Physics body
+    const rocketShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
+    const rocketBody = new CANNON.Body({
+        mass: 0.5,
+        position: new CANNON.Vec3(startPos.x, startPos.y, startPos.z),
+        shape: rocketShape,
+        velocity: new CANNON.Vec3(direction.x * 20, direction.y * 20, direction.z * 20),
+        collisionFilterGroup: 2,
+        collisionFilterMask: 1
+    });
+    physicsWorld.addBody(rocketBody);
+
+    rocket.userData.body = rocketBody;
+    rocketBody.userData = { mesh: rocket, isRocket: true, owner: ownerId };
+
+    // Garante corpo físico para todos os jogadores
+    ensurePlayerPhysicsBody();
+    for (const id in otherPlayers) {
+        const remote = otherPlayers[id];
+        if (!remote.userData.body) {
+            const remoteShape = new CANNON.Box(new CANNON.Vec3(1, 3, 1));
+            const remoteBody = new CANNON.Body({
+                mass: 0,
+                position: new CANNON.Vec3(remote.position.x, remote.position.y, remote.position.z),
+                shape: remoteShape,
+                collisionFilterGroup: 1,
+                collisionFilterMask: 2
+            });
+            remoteBody.userData = { mesh: remote, isPlayer: true, playerId: id };
+            physicsWorld.addBody(remoteBody);
+            remote.userData.body = remoteBody;
+        }
+    }
+
+    // Colisão do foguete
+    rocketBody.addEventListener('collide', function (event) {
+        if (
+            event.body &&
+            event.body.userData &&
+            event.body.userData.isPlayer &&
+            rocketBody.userData.owner !== event.body.userData.playerId // Não mata o dono
+        ) {
+            scene.remove(rocket);
+            physicsWorld.removeBody(rocketBody);
+
+            // Se for o player local, morre e avisa o servidor
+            if (event.body.userData.playerId === playerId) {
+                respawnPlayer();
+                if (socket && socket.connected) {
+                    socket.emit('playerHit', { killer: ownerId, victim: playerId });
+                }
+            }
+        }
+    });
+
+    // Animação do foguete
+    function animateRocket() {
+        rocket.position.copy(rocketBody.position);
+        rocket.quaternion.copy(rocketBody.quaternion);
+
+        if (rocket.position.distanceTo(startPos) > maxDistance + 5 || rocket.position.y < -5) {
+            scene.remove(rocket);
+            physicsWorld.removeBody(rocketBody);
+            return;
+        }
+        requestAnimationFrame(animateRocket);
+    }
+    animateRocket();
+}
 function animate() {
     requestAnimationFrame(animate);
 
@@ -1896,6 +1965,12 @@ function animate() {
     } else if (equippedTool === 'rocketLauncher') {
         player.rightArm.rotation.x = equipTargetRotation;
     }
+
+    if (player.userData.body) {
+        player.userData.body.position.copy(player.position);
+    }
+
+    ensurePlayerPhysicsBody();
 }
 
 // Chat message handling
@@ -1959,3 +2034,49 @@ window.addEventListener('mousemove', (event) => {
 });
 
 window.addEventListener('click', launchRocket);
+
+// Função para adicionar chapéu ao player
+function addHatToPlayer(player, hatId) {
+    // Remove chapéu antigo se houver
+    if (player.userData.currentHat) {
+        if (player.userData.currentHat.parent) {
+            player.userData.currentHat.parent.remove(player.userData.currentHat);
+        }
+        player.userData.currentHat = null;
+        player.userData.currentHatId = null;
+    }
+    if (!hatId) return;
+
+    // Mapeamento dos modelos
+    const hatMap = {
+        'hat_red': 'roblox_r_baseball_cap_r6.glb',
+        'hat_doge': 'doge_roblox_hat.glb',
+        'hat_fedora_black': 'roblox_fedora.glb'
+    };
+    const hatModelPath = hatMap[hatId];
+    if (!hatModelPath) return;
+
+    const loader = new GLTFLoader();
+    loader.load(hatModelPath, (gltf) => {
+        const hat = gltf.scene;
+        // Ajuste escala e posição conforme o chapéu
+        if (hatId === 'hat_red' || hatId === 'hat_fedora_black') {
+            hat.scale.set(0.3, 0.3, 0.3);
+            hat.position.set(0, 1.08, 0.05);
+        } else if (hatId === 'hat_doge') {
+            hat.scale.set(0.4, 0.4, 0.4);
+            hat.position.set(0, 0.8, 0);
+            hat.rotation.y = Math.PI / 2.5;
+        }
+        // Encontre a cabeça do player
+        let head = null;
+        player.traverse(child => {
+            if (child.isMesh && child.name === "Head") head = child;
+        });
+        if (head) {
+            head.add(hat);
+            player.userData.currentHat = hat;
+            player.userData.currentHatId = hatId;
+        }
+    });
+}
