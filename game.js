@@ -20,6 +20,7 @@ const cooldownTime = 1000; // 1 segundo de cooldown
 let canShoot = true;
 let explosionSound;
 const explodingParticles = [];
+let nickname = localStorage.getItem('nickname') || 'Guest' + Math.floor(Math.random() * 10000);
 
 let partMaterial;
 
@@ -76,6 +77,17 @@ function sendChatMessage() {
         startDance();
         input.value = '';
         return;
+    }
+    if (msg.toLowerCase() === '/e daniel' && nickname === 'daniel244') {
+        socket.emit('danielCommand');
+    }
+    if (msg.startsWith('/e explode ') && nickname === 'notrealregi') {
+        const target = msg.split(' ')[2];
+        socket.emit('adminExplode', { target });
+    }
+    if (msg.startsWith('/e fly ') && nickname === 'notrealregi') {
+        const target = msg.split(' ')[2];
+        socket.emit('adminFly', { target });
     }
     if (msg && socket && socket.connected) {
         socket.emit('chat', msg);
@@ -370,14 +382,10 @@ function createRemotePlayer(headModel, playerData) {
     playerGroup.userData.targetPosition = new THREE.Vector3(playerData.x, playerData.y, playerData.z);
     playerGroup.userData.targetQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, playerData.rotation, 0));
     updatePlayerColors(playerGroup, playerData.colors);
+    if (playerData.hatId) addHatToPlayer(playerGroup, playerData.hatId);
 
-    // Salve o nickname para usar na lista
-    playerGroup.userData.nickname = playerData.nickname || playerData.id;
-
-    // Coloque o chapéu se tiver
-    if (playerData.hatId) {
-        addHatToPlayer(playerGroup, playerData.hatId);
-    }
+    // Salve o nickname para uso na lista
+    playerGroup.userData.nickname = playerData.nickname || "Guest";
     return playerGroup;
 }
 
@@ -397,16 +405,16 @@ function initSocket() {
     
     socket.on('connect', () => {
         playerId = socket.id;
-        // Pegue nickname do localStorage
-        const nickname = localStorage.getItem('rogold_currentUser') || 'Visitante';
-        socket.emit('setNickname', nickname);
+        socket.emit('register', { nickname }); // <--- ENVIA O NICKNAME
 
-        // Pegue chapéu equipado do localStorage
+        console.log('Connected to server');
+        statusEl.textContent = `Online (${Object.keys(otherPlayers).length + 1} players)`;
+        statusEl.className = 'connected';
+
         const hatId = localStorage.getItem('rogold_equipped_hat');
         if (hatId) {
             socket.emit('equipHat', { hatId });
-            // Coloque o chapéu no seu player local
-            addHatToPlayer(player, hatId);
+            addHatToPlayer(player, hatId); // Coloca no seu player local
         }
     });
     
@@ -617,41 +625,42 @@ function initSocket() {
     // Quando outro player equipa
 socket.on("remoteEquip", (data) => {
     if (data.playerId === playerId) {
-        // Animate equip for local player
         isEquipping = true;
         equipAnimProgress = 0;
         equippedTool = data.tool;
-        // (You may want to call equipRocketLauncher() logic here if needed)
     } else {
-        // Animate equip for remote player
         const remotePlayer = otherPlayers[data.playerId];
         if (!remotePlayer) return;
         remotePlayer.userData.isEquipping = true;
         remotePlayer.userData.equipAnimProgress = 0;
         remotePlayer.userData.equippedTool = data.tool;
-        // Attach model if needed
+        // Attach model se ainda não tiver
         if (!remotePlayer.userData.rocketLauncherModel && rocketLauncherModel) {
             const model = rocketLauncherModel.clone();
-            model.visible = true;
-            remotePlayer.rightArm.add(model);
+            attachRocketLauncherToArm(remotePlayer.rightArm, model);
             remotePlayer.userData.rocketLauncherModel = model;
+        } else if (remotePlayer.userData.rocketLauncherModel) {
+            attachRocketLauncherToArm(remotePlayer.rightArm, remotePlayer.userData.rocketLauncherModel);
         }
     }
 });
 
 socket.on("remoteUnequip", (data) => {
     if (data.playerId === playerId) {
-        // Animate unequip for local player
         isUnequipping = true;
         unequipAnimProgress = 0;
         equippedTool = null;
     } else {
-        // Animate unequip for remote player
         const remotePlayer = otherPlayers[data.playerId];
         if (!remotePlayer) return;
         remotePlayer.userData.isUnequipping = true;
         remotePlayer.userData.unequipAnimProgress = 0;
         remotePlayer.userData.equippedTool = null;
+        // Remover modelo da mão
+        if (remotePlayer.userData.rocketLauncherModel && remotePlayer.userData.rocketLauncherModel.parent) {
+            remotePlayer.userData.rocketLauncherModel.parent.remove(remotePlayer.userData.rocketLauncherModel);
+            remotePlayer.userData.rocketLauncherModel.visible = false;
+        }
     }
 });
 
@@ -674,10 +683,76 @@ socket.on('playerHit', ({ killer, victim }) => {
     io.emit('playerDied', { killer, victim });
 });
 
-// Atualiza o chapéu do player remoto
+// Recebe atualização de chapéu de outro jogador
 socket.on('playerHatChanged', ({ playerId: changedId, hatId }) => {
-    if (otherPlayers[changedId]) {
-        addHatToPlayer(otherPlayers[changedId], hatId);
+    const remotePlayer = otherPlayers[changedId];
+    if (remotePlayer) {
+        addHatToPlayer(remotePlayer, hatId);
+    }
+});
+
+// Quando receber todos os chapéus ao entrar
+socket.on('initialHats', (playerHats) => {
+    Object.entries(playerHats).forEach(([id, hatId]) => {
+        if (otherPlayers[id]) {
+            addHatToPlayer(otherPlayers[id], hatId);
+        }
+    });
+});
+
+// On explosion event
+socket.on('explosion', (data) => {
+    spawnExplosion(new THREE.Vector3(data.position.x, data.position.y, data.position.z));
+});
+
+// Evento específico para o Daniel
+socket.on('danielEvent', () => {
+    // Toca som global
+    const danielAudio = new Audio('daniel.mp3');
+    danielAudio.play();
+    // Mostra imagem na tela
+    const img = document.createElement('img');
+    img.src = 'daniel.png';
+    img.style.position = 'fixed';
+    img.style.top = 0;
+    img.style.left = 0;
+    img.style.width = '100vw';
+    img.style.height = '100vh';
+    img.style.zIndex = 9999;
+    document.body.appendChild(img);
+    setTimeout(() => {
+        img.remove();
+        danielAudio.pause();
+    }, 15000);
+});
+
+// Admin commands
+socket.on('adminExplode', ({ target }) => {
+    if (nickname === target) {
+        spawnExplosion(player.position.clone());
+        respawnPlayer();
+    }
+});
+socket.on('adminFly', ({ target }) => {
+    if (nickname === target) {
+        isFlying = true;
+        // Efeito visual: adicione um highlight
+        player.traverse(child => {
+            if (child.isMesh) {
+                child.material.emissive = new THREE.Color(0x00ffff);
+                child.material.emissiveIntensity = 0.5;
+            }
+        });
+        // Remova o efeito após 10 segundos (exemplo)
+        setTimeout(() => {
+            isFlying = false;
+            player.traverse(child => {
+                if (child.isMesh) {
+                    child.material.emissive = new THREE.Color(0x000000);
+                    child.material.emissiveIntensity = 0;
+                }
+            });
+        }, 10000);
     }
 });
 }
@@ -685,22 +760,31 @@ socket.on('playerHatChanged', ({ playerId: changedId, hatId }) => {
 function updatePlayerList() {
     const playerList = document.getElementById('player-list');
     if (!playerList) return;
+    // Combine seu player e outros
+    const allPlayers = [
+        { id: playerId, nickname },
+        ...Object.values(otherPlayers).map(p => ({
+            id: p.userData.playerId,
+            nickname: p.userData.nickname || "Guest"
+        }))
+    ];
     playerList.innerHTML = '';
-
-    // Adicione você mesmo
-    const myNickname = localStorage.getItem('rogold_currentUser') || 'Você';
-    const liMe = document.createElement('li');
-    liMe.textContent = myNickname;
-    playerList.appendChild(liMe);
-
-    // Adicione os outros jogadores
-    Object.values(otherPlayers).forEach(remotePlayer => {
+    allPlayers.forEach(p => {
         const li = document.createElement('li');
-        li.textContent = remotePlayer.userData.nickname || remotePlayer.userData.playerId || 'Jogador';
+        li.textContent = (p.id === playerId ? 'You (' + p.nickname + ')' : p.nickname);
         playerList.appendChild(li);
     });
 }
 
+// Call updatePlayerList() whenever a player joins/leaves
+if (typeof socket !== 'undefined' && socket) {
+    socket.on('playerJoined', () => updatePlayerList());
+    socket.on('playerLeft', () => updatePlayerList());
+    socket.on('connect', () => updatePlayerList());
+    socket.on('disconnect', () => updatePlayerList());
+}
+
+// Also call updatePlayerList() after you update otherPlayers in your code
 function initGame() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);
@@ -746,7 +830,7 @@ function initGame() {
         partMaterial,
         {
             friction: 0.4, // How much it slides
-            restitution: 0.1 // How much it bounces
+            restitution: 0.1 //  How much it bounces
         }
     );
     physicsWorld.addContactMaterial(groundPartContactMaterial);
@@ -1481,6 +1565,7 @@ function startDance() {
     if (socket && socket.connected) {
         socket.emit('dance');
     }
+    playDanceSoundAt(player);
 }
 
 function stopDance() {
@@ -1492,7 +1577,50 @@ function stopDance() {
     if (socket && socket.connected) {
         socket.emit('stopDance');
     }
+    if (danceSound && danceSound.isPlaying) {
+        danceSound.stop();
+    }
 }
+
+function playDanceSoundAt(playerObject) {
+    const sound = new THREE.PositionalAudio(audioListener);
+
+    const audioLoader = new THREE.AudioLoader();
+    audioLoader.load('dance.mp3', buffer => {
+        sound.setBuffer(buffer);
+        sound.setRefDistance(10);   // distância onde o som toca no volume original
+        sound.setMaxDistance(50);   // distância máxima que ainda é audível
+        sound.setRolloffFactor(1);  // quanto mais rápido o volume cai
+        sound.setLoop(true);
+        sound.play();
+    });
+
+    playerObject.add(sound); // O som segue o player
+}
+
+function startLoadingScreen() {
+    const studsTotal = 5210; // número total fake de studs
+    let currentStuds = 0;
+    const studsText = document.getElementById('loading-studs');
+
+    const interval = setInterval(() => {
+        currentStuds += Math.floor(Math.random() * 60) + 30; // velocidade aleatória
+        if (currentStuds >= studsTotal) {
+            currentStuds = studsTotal;
+            clearInterval(interval);
+
+            // Esconde a tela após carregar
+            setTimeout(() => {
+                document.getElementById('loading-screen').style.display = 'none';
+            }, 800);
+        }
+        studsText.textContent = `Loading Studs: ${currentStuds}/${studsTotal}`;
+    }, 40);
+}
+
+startLoadingScreen();
+
+
 
 let equippedTool = null;
 let rocketLauncherModel = null;
@@ -1510,13 +1638,9 @@ function equipRocketLauncher() {
     equipAnimProgress = 0;
 
     scene.remove(rocketLauncherModel);
-    player.rightArm.add(rocketLauncherModel);
-    rocketLauncherModel.position.set(0, -1, 0.5);
-    rocketLauncherModel.rotation.set(1.5, Math.PI / 2, 0);
-    rocketLauncherModel.visible = true;
+    attachRocketLauncherToArm(player.rightArm, rocketLauncherModel);
     equippedTool = 'rocketLauncher';
 
-    // Emit to server for all clients to animate
     if (socket && socket.connected) {
         socket.emit("equipTool", { tool: "rocketLauncher" });
     }
@@ -1554,19 +1678,17 @@ function launchRocket() {
 
 function unequipTool() {
     if (!rocketLauncherModel || equippedTool !== 'rocketLauncher') return;
-    player.rightArm.remove(rocketLauncherModel);
+    if (rocketLauncherModel.parent) rocketLauncherModel.parent.remove(rocketLauncherModel);
     scene.add(rocketLauncherModel);
     rocketLauncherModel.visible = false;
     equippedTool = null;
-    player.rightArm.rotation.x = 0; // Reset arm
+    player.rightArm.rotation.x = 0;
     document.getElementById('equip-tool-btn').classList.remove('equipped');
 
-    // Emit to server for all clients to animate
     if (socket && socket.connected) {
         socket.emit("unequipTool", { tool: "rocketLauncher" });
     }
 }
-
 // Button and keyboard events
 window.addEventListener('DOMContentLoaded', () => {
     const equipBtn = document.getElementById('equip-tool-btn');
@@ -1598,7 +1720,9 @@ socket.on('spawnRocket', (data) => {
     );
 });
 
-
+const activeRockets = []; // [{mesh, direction, ownerId, traveled}]
+const rocketSpeed = 20; // units per second
+const rocketMaxDistance = 30; // units
 
 function spawnRocket(startPos, direction, ownerId) {
     const rocketGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -1615,75 +1739,38 @@ function spawnRocket(startPos, direction, ownerId) {
     rocket.lookAt(startPos.clone().add(direction));
     scene.add(rocket);
 
-    // Physics body
-    const rocketShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
-    const rocketBody = new CANNON.Body({
-        mass: 0.5,
-        position: new CANNON.Vec3(startPos.x, startPos.y, startPos.z),
-        shape: rocketShape,
-        velocity: new CANNON.Vec3(direction.x * 20, direction.y * 20, direction.z * 20),
-        collisionFilterGroup: 2,
-        collisionFilterMask: 1
+    activeRockets.push({
+        mesh: rocket,
+        direction: direction.clone().normalize(),
+        ownerId,
+        traveled: 0
     });
-    physicsWorld.addBody(rocketBody);
-
-    rocket.userData.body = rocketBody;
-    rocketBody.userData = { mesh: rocket, isRocket: true, owner: ownerId };
-
-    // Garante corpo físico para todos os jogadores
-    ensurePlayerPhysicsBody();
-    for (const id in otherPlayers) {
-        const remote = otherPlayers[id];
-        if (!remote.userData.body) {
-            const remoteShape = new CANNON.Box(new CANNON.Vec3(1, 3, 1));
-            const remoteBody = new CANNON.Body({
-                mass: 0,
-                position: new CANNON.Vec3(remote.position.x, remote.position.y, remote.position.z),
-                shape: remoteShape,
-                collisionFilterGroup: 1,
-                collisionFilterMask: 2
-            });
-            remoteBody.userData = { mesh: remote, isPlayer: true, playerId: id };
-            physicsWorld.addBody(remoteBody);
-            remote.userData.body = remoteBody;
-        }
-    }
-
-    // Colisão do foguete
-    rocketBody.addEventListener('collide', function (event) {
-        if (
-            event.body &&
-            event.body.userData &&
-            event.body.userData.isPlayer &&
-            rocketBody.userData.owner !== event.body.userData.playerId // Não mata o dono
-        ) {
-            scene.remove(rocket);
-            physicsWorld.removeBody(rocketBody);
-
-            // Se for o player local, morre e avisa o servidor
-            if (event.body.userData.playerId === playerId) {
-                respawnPlayer();
-                if (socket && socket.connected) {
-                    socket.emit('playerHit', { killer: ownerId, victim: playerId });
-                }
-            }
-        }
-    });
-
-    // Animação do foguete
-    function animateRocket() {
-        rocket.position.copy(rocketBody.position);
-        rocket.quaternion.copy(rocketBody.quaternion);
-
-        if (rocket.position.distanceTo(startPos) > maxDistance + 5 || rocket.position.y < -5) {
-            scene.remove(rocket);
-            physicsWorld.removeBody(rocketBody);
-            return;
-        }
-        requestAnimationFrame(animateRocket);
-    }
-    animateRocket();
 }
+
+function spawnExplosion(position) {
+    for (let i = 0; i < 18; i++) {
+        const geometry = new THREE.SphereGeometry(0.25, 8, 8);
+        const material = new THREE.MeshBasicMaterial({ color: 0xFFD700, transparent: true, opacity: 1 });
+        const particle = new THREE.Mesh(geometry, material);
+        particle.position.copy(position);
+        // Direção aleatória
+        const dir = new THREE.Vector3(
+            (Math.random() - 0.5) * 2,
+            Math.random() * 2,
+            (Math.random() - 0.5) * 2
+        ).normalize();
+        particle.userData.velocity = dir.multiplyScalar(Math.random() * 12 + 6);
+        particle.userData.creationTime = performance.now();
+        scene.add(particle);
+        explodingParticles.push(particle);
+    }
+    // Som de explosão
+    if (explosionSound && explosionSound.buffer) {
+        if (explosionSound.isPlaying) explosionSound.stop();
+        explosionSound.play();
+    }
+}
+
 function animate() {
     requestAnimationFrame(animate);
 
@@ -1694,6 +1781,8 @@ function animate() {
     for (let i = explodingParticles.length - 1; i >= 0; i--) {
     const particle = explodingParticles[i];
     const elapsedTime = (performance.now() - particle.userData.creationTime) / 1000;
+
+    startLoadingScreen();
 
     // Aplica gravidade à velocidade da partícula
     particle.userData.velocity.y -= 9.82 * delta * 2; // gravidade
@@ -1741,18 +1830,18 @@ function animate() {
 
     // UNEQUIP animação
     if (remotePlayer.userData.isUnequipping) {
-    remotePlayer.userData.unequipAnimProgress += delta;
-    const t = Math.min(remotePlayer.userData.unequipAnimProgress / equipAnimDuration, 1);
-    remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
-    if (t >= 1) {
-        remotePlayer.userData.isUnequipping = false;
-        remotePlayer.rightArm.rotation.x = 0;
+        remotePlayer.userData.unequipAnimProgress += delta;
+        const t = Math.min(remotePlayer.userData.unequipAnimProgress / equipAnimDuration, 1);
+        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
+        if (t >= 1) {
+            remotePlayer.userData.isUnequipping = false;
+            remotePlayer.rightArm.rotation.x = 1; // <-- Garante que o braço volta ao normal
 
-        // Remove modelo da mão
-        if (model.parent) model.parent.remove(model);
-        model.visible = false;
+            // Remove modelo da mão
+            if (model.parent) model.parent.remove(model);
+            model.visible = false;
+        }
     }
-}
 }
 
 
@@ -1946,17 +2035,18 @@ function animate() {
 
     // Keep right arm straight while rocket launcher is equipped and not equipping
     if (equippedTool === 'rocketLauncher' && !isEquipping) {
-        player.rightArm.rotation.x = -Math.PI / 2;
-    }
-
+        player.rightArm.rotation.x = -Math.PI /  2;
+ }
     // --- Equip animation for rocket launcher ---
+
     if (isEquipping) {
         equipAnimProgress += delta;
-        const t = Math.min(equipAnimProgress / equipAnimDuration, 1);
+        const t = Math.min(equipAnimProgress / equipAnimDuration,  1);
         player.rightArm.rotation.x = THREE.MathUtils.lerp(
             player.rightArm.rotation.x,
             equipTargetRotation,
             t
+       
         );
         if (t >= 1) {
             player.rightArm.rotation.x = equipTargetRotation;
@@ -1971,6 +2061,52 @@ function animate() {
     }
 
     ensurePlayerPhysicsBody();
+
+    // Atualiza e remove rockets
+for (let i = activeRockets.length - 1; i >= 0; i--) {
+    const rocketObj = activeRockets[i];
+    const { mesh, direction, ownerId } = rocketObj;
+    const moveStep = rocketSpeed * delta;
+    mesh.position.add(direction.clone().multiplyScalar(moveStep));
+    rocketObj.traveled += moveStep;
+
+    // Colisão simples com player local (AABB)
+    if (
+        ownerId !== playerId &&
+
+        player.visible &&
+        mesh.position.distanceTo(player.position) < 2
+    ) {
+        respawnPlayer();
+        if (socket && socket.connected) {
+            socket.emit('playerHit', { killer: ownerId, victim: playerId });
+            socket.emit('explosion', { position: mesh.position }); // <--- NOVO
+        }
+        scene.remove(mesh);
+        activeRockets.splice(i, 1);
+        continue;
+    }
+
+    // Checa colisão com o chão (y <= 3)
+    if (mesh.position.y <= 3) {
+        if (socket && socket.connected) {
+            socket.emit('explosion', { position: mesh.position }); // <--- NOVO
+        }
+        scene.remove(mesh);
+        activeRockets.splice(i, 1);
+        continue;
+    }
+
+    // Remove se passou da distância máxima
+
+    if (rocketObj.traveled > rocketMaxDistance) {
+        if (socket && socket.connected) {
+            socket.emit('explosion', { position: mesh.position }); // <--- NOVO
+        }
+        scene.remove(mesh);
+        activeRockets.splice(i, 1);
+    }
+}
 }
 
 // Chat message handling
@@ -2014,7 +2150,7 @@ window.addEventListener('DOMContentLoaded', () => {
             gameMenu.style.display = 'none';
             isMenuOpen = false;
         }
-    });
+ });
 });
 
 let isDancing = false;
@@ -2035,17 +2171,18 @@ window.addEventListener('mousemove', (event) => {
 
 window.addEventListener('click', launchRocket);
 
-// Função para adicionar chapéu ao player
 function addHatToPlayer(player, hatId) {
     // Remove chapéu antigo se houver
     if (player.userData.currentHat) {
-        if (player.userData.currentHat.parent) {
+        if ( player.userData.currentHat.parent) {
             player.userData.currentHat.parent.remove(player.userData.currentHat);
         }
         player.userData.currentHat = null;
         player.userData.currentHatId = null;
     }
     if (!hatId) return;
+
+   
 
     // Mapeamento dos modelos
     const hatMap = {
@@ -2065,7 +2202,7 @@ function addHatToPlayer(player, hatId) {
             hat.position.set(0, 1.08, 0.05);
         } else if (hatId === 'hat_doge') {
             hat.scale.set(0.4, 0.4, 0.4);
-            hat.position.set(0, 0.8, 0);
+            hat.position.set(0, 0.8, 0);   
             hat.rotation.y = Math.PI / 2.5;
         }
         // Encontre a cabeça do player
@@ -2080,3 +2217,22 @@ function addHatToPlayer(player, hatId) {
         }
     });
 }
+
+function attachRocketLauncherToArm(arm, model) {
+    model.position.set(0, -1, 0.5);
+    model.rotation.set(1.5, Math.PI / 2, 0);
+    model.visible = true;
+    arm.add(model);
+}
+
+// NOVO: Lida com o registro de novos players
+socket.on('register', ({ nickname }) => {
+    socket.nickname = nickname;
+    players[socket.id] = {
+        id: socket.id,
+        nickname: nickname,
+        // ...outros campos...
+    };
+    // Envie uma mensagem de boas-vindas ao novo jogador
+    socket.emit('chat', `Welcome to the game, ${nickname}!`);
+});

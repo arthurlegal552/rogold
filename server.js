@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,15 +15,21 @@ const io = socketIo(server, {
 });
 
 const PORT = process.env.PORT || 3000;
+const DATA_FILE = path.join(__dirname, 'players_data.json');
+let playersData = {};
+
+// Load existing player data from file
+if (fs.existsSync(DATA_FILE)) {
+    playersData = JSON.parse(fs.readFileSync(DATA_FILE));
+}
+
+// Save player data to file
+function savePlayersData() {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(playersData, null, 2));
+}
 
 // Serve static files
 app.use(express.static(__dirname));
-
-io.on('connection', socket => {
-    socket.on('chat', msg => {
-        io.emit('chat', { playerId: socket.id, message: msg });
-    });
-});
 
 // Routes
 app.get('/', (req, res) => {
@@ -36,146 +43,144 @@ app.get('/health', (req, res) => {
 
 // Store connected players
 let players = {};
+const activeNicknames = {};
 const GAME_TICK_RATE = 20; // 20 updates per second
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
     console.log(`Player connected: ${socket.id}`);
-    
-    // Send current players to new player
-    socket.emit('initialPlayers', players);
-    
-    // Add new player
-    players[socket.id] = {
-        id: socket.id,
-        x: 0,
-        y: 3,
-        z: 0,
-        rotation: 0,
-        isMoving: false,
-        // Default colors
-        colors: {
-            head: '#FAD417',
-            torso: '#00A2FF',
-            arms: '#FAD417',
-            legs: '#80C91C'
+
+    // REGISTRO DE NICKNAME ÚNICO
+    socket.on('register', ({ nickname }) => {
+        // Bloqueia nick duplicado
+        if (Object.values(activeNicknames).includes(nickname)) {
+            socket.emit('nicknameError', 'A sua conta já está sendo usada neste mesmo momento por favor saia do jogo e troque a conta');
+            socket.disconnect();
+            return;
         }
-    };
-    
-    // Notify other players about new player
-    socket.broadcast.emit('playerJoined', players[socket.id]);
+        // Marca nickname como ativo
+        activeNicknames[socket.id] = nickname;
+        socket.nickname = nickname;
 
-    socket.on('playerAnim', (data) => {
-  const id = data.playerId;
-  if (!remotePlayers[id]) return;
-  const rp = remotePlayers[id];
-  const name = data.anim;
+        // Cria player
+        players[socket.id] = {
+            id: socket.id,
+            nickname: nickname,
+            x: 0, y: 3, z: 0,
+            rotation: 0,
+            isMoving: false,
+            colors: {
+                head: '#FAD417',
+                torso: '#00A2FF',
+                arms: '#FAD417',
+                legs: '#80C91C'
+            },
+            hatId: null
+        };
 
-  // evita re-aplicar o mesmo estado várias vezes
-  if (rp.currentAnim === name) return;
-  rp.currentAnim = name;
+        // Envia todos os players para o novo
+        socket.emit('initialPlayers', players);
+        // Avise os outros
+        socket.broadcast.emit('playerJoined', players[socket.id]);
+    });
 
-  const action = rp.actions[name];
-  if (!action) return;
+    // CHAT
+    socket.on('chat', msg => {
+        io.emit('chat', { playerId: socket.id, nickname: socket.nickname, message: msg });
+    });
 
-  // configura loop e tempo
-  action.reset();
-  action.setLoop(data.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
-  const clipDur = action.getClip().duration || 1;
-  action.time = (data.normalizedTime || 0) * clipDur;
-
-  // crossfade (suave)
-  if (rp.lastAction && rp.lastAction !== action) {
-    rp.lastAction.crossFadeTo(action, 0.18, false);
-  } else {
-    action.play();
-  }
-  rp.lastAction = action;
-});
-    
-    // Handle player movement
+    // MOVIMENTO
     socket.on('playerMove', (data) => {
         if (players[socket.id]) {
-            players[socket.id].x = data.x;
-            players[socket.id].y = data.y;
-            players[socket.id].z = data.z;
-            players[socket.id].rotation = data.rotation;
-            players[socket.id].isMoving = data.isMoving;
-            
-            // Movement is now broadcasted by the game loop, not here.
+            Object.assign(players[socket.id], data);
+            players[socket.id].nickname = socket.nickname; // sempre mantenha
         }
     });
-    
-    // Handle player color customization
+
+    // CUSTOMIZAÇÃO
     socket.on('playerCustomize', (colors) => {
         if (players[socket.id]) {
             players[socket.id].colors = colors;
-            // The color change will be broadcast in the next game state update.
         }
     });
 
+    // CHAPÉU
+    socket.on('equipHat', ({ hatId }) => {
+        if (players[socket.id]) {
+            players[socket.id].hatId = hatId;
+        }
+        io.emit('playerHatChanged', { playerId: socket.id, hatId });
+    });
+
+    // FERRAMENTAS
     socket.on("equipTool", (data) => {
         socket.broadcast.emit("remoteEquip", { playerId: socket.id, tool: data.tool });
     });
-
     socket.on("unequipTool", (data) => {
         socket.broadcast.emit("remoteUnequip", { playerId: socket.id, tool: data.tool });
     });
 
-    // valida/repete animação para outros
-socket.on('playerAnim', (data) => {
-  // validações simples - string e taxa de envio
-  if (!data || typeof data.anim !== 'string') return;
-
-  // opcional: throttle por socket para evitar spam (ex.: 5 msgs/s)
-  const now = Date.now();
-  socket.lastAnimAt = socket.lastAnimAt || 0;
-  if (now - socket.lastAnimAt < 150) return; // 150ms min entre animações
-  socket.lastAnimAt = now;
-
-  // re-broadcast para todos (exceto quem enviou) com id do jogador
-  socket.broadcast.emit('playerAnim', {
-    playerId: socket.id,
-    anim: data.anim,
-    loop: !!data.loop,
-    normalizedTime: typeof data.normalizedTime === 'number' ? data.normalizedTime : 0,
-    timestamp: now
-  });
-});
-    
-    // Handle disconnection
-    socket.on('disconnect', () => {
-        console.log(`Player disconnected: ${socket.id}`);
-        delete players[socket.id];
-        socket.broadcast.emit('playerLeft', socket.id);
-    });
-
-    socket.on('damage', (data) => {
-        if (players[data.targetId]) {
-            players[data.targetId].health = Math.max(0, players[data.targetId].health - data.amount);
-            players[data.targetId].dead = players[data.targetId].health <= 0;
-            io.emit('gameState', players);
-        }
-    });
-    
-    // Handle connection errors
-    socket.on('connect_error', (error) => {
-        console.log('Connection error:', error);
-    });
-    
-    // Handle dance emote
+    // DANÇA
     socket.on('dance', () => {
-        // Broadcast to all clients except the sender
         socket.broadcast.emit('dance', socket.id);
     });
-
-    // Handle stop dance emote
     socket.on('stopDance', () => {
         socket.broadcast.emit('stopDance', socket.id);
     });
+
+    // ROCKET
+    socket.on('launchRocket', data => {
+        io.emit('spawnRocket', data);
+    });
+
+    // EXPLOSÃO
+    socket.on('explosion', (data) => {
+        io.emit('explosion', data);
+    });
+
+    // RAGDOLL
+    socket.on('playerRagdoll', (data) => {
+        io.emit('playerRagdoll', data);
+    });
+
+    // ADMIN COMANDOS
+    socket.on('danielCommand', () => {
+        if (socket.nickname === 'daniel244') {
+            if (socket.lastDaniel && Date.now() - socket.lastDaniel < 20000) return;
+            socket.lastDaniel = Date.now();
+            io.emit('danielEvent');
+        }
+    });
+    socket.on('adminExplode', ({ target }) => {
+        if (socket.nickname === 'notrealregi') {
+            for (let id in players) {
+                if (players[id].nickname === target) {
+                    io.emit('adminExplode', { target });
+                    break;
+                }
+            }
+        }
+    });
+    socket.on('adminFly', ({ target }) => {
+        if (socket.nickname === 'notrealregi') {
+            for (let id in players) {
+                if (players[id].nickname === target) {
+                    io.emit('adminFly', { target });
+                    break;
+                }
+            }
+        }
+    });
+
+    // DESCONECTAR
+    socket.on('disconnect', () => {
+        delete activeNicknames[socket.id];
+        delete players[socket.id];
+        io.emit('playerLeft', socket.id);
+    });
 });
 
-// Server-side game loop
+// GAME LOOP
 setInterval(() => {
     io.emit('gameState', players);
 }, 1000 / GAME_TICK_RATE);
