@@ -660,9 +660,9 @@ class CatalogManager {
     constructor() {
         this.items = [
             // Only 3D items with modelPath and a corresponding imageUrl (thumbnail)
-            { id: 'hat_red', name: 'Boné Vermelho R', type: 'hat', price: 100, imageUrl: 'hat_red_thumbnail.png', modelPath: 'roblox_r_baseball_cap_r6.glb' },
-            { id: 'hat_doge', name: 'Chapéu Doge', type: 'hat', price: 500, imageUrl: 'hat_doge_thumbnail.png', modelPath: 'doge_roblox_hat.glb' },
-            { id: 'hat_fedora_black', name: 'Fedora Preta', type: 'hat', price: 300, imageUrl: 'hat_fedora_black_thumbnail.png', modelPath: 'roblox_fedora.glb' }
+            { id: 'hat_red', name: 'Boné Vermelho R', type: 'hat', price: 100, imageUrl: 'hat_red_thumbnail.jpg', modelPath: 'roblox_r_baseball_cap_r6.glb' },
+            { id: 'hat_doge', name: 'Chapéu Doge', type: 'hat', price: 500, imageUrl: 'hat_doge_thumbnail.jpg', modelPath: 'doge_roblox_hat.glb' },
+            { id: 'hat_fedora_black', name: 'Fedora Preta', type: 'hat', price: 300, imageUrl: 'hat_fedora_black_thumbnail.jpg', modelPath: 'roblox_fedora.glb' }
             // Removed all 2D items as per user request
         ]
     }
@@ -2245,3 +2245,34 @@ function stopCoinRewardTimer() {
         coinRewardIntervalId = null;
     }
 }
+
+// Socket.io integration (example)
+// This is just a basic example, the actual implementation may vary based on the server setup and requirements
+const socket = io(); // Assuming io is available globally
+
+socket.on('connect', () => {
+    console.log('Connected to server via Socket.io');
+    
+    const currentUser = userManager.getCurrentUser();
+    if (currentUser) {
+        // Emit register event with the current user's nickname
+        socket.emit('register', { nickname: currentUser });
+    }
+});
+
+// Listen for account data from the server
+socket.on('accountData', (data) => {
+    const { nickname, equippedItems, coins } = data;
+
+    // Update local user manager and profile manager data
+    userManager.currentUser = nickname;
+    localStorage.setItem('rogold_currentUser', nickname);
+
+    profileManager.profiles[nickname] = profileManager.profiles[nickname] || {};
+    profileManager.profiles[nickname].equippedItems = equippedItems;
+    profileManager.profiles[nickname].coins = coins;
+
+    profileManager.saveProfiles();
+
+    console.log(`Account data received and applied for ${nickname}`);
+});

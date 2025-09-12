@@ -161,16 +161,6 @@ io.on('connection', (socket) => {
             }
         }
     });
-    socket.on('adminFly', ({ target }) => {
-        if (socket.nickname === 'notrealregi') {
-            for (let id in players) {
-                if (players[id].nickname === target) {
-                    io.emit('adminFly', { target });
-                    break;
-                }
-            }
-        }
-    });
 
     // DESCONECTAR
     socket.on('disconnect', () => {

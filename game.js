@@ -20,7 +20,10 @@ const cooldownTime = 1000; // 1 segundo de cooldown
 let canShoot = true;
 let explosionSound;
 const explodingParticles = [];
-let nickname = localStorage.getItem('nickname') || 'Guest' + Math.floor(Math.random() * 10000);
+let nickname = localStorage.getItem('rogold_currentUser') || 'Guest' + Math.floor(Math.random() * 10000);
+let isFlying = false;
+let speedMultiplier = 1;   // começa normal
+let isSpeeding = false;    // controle do modo admin
 
 let partMaterial;
 
@@ -85,10 +88,6 @@ function sendChatMessage() {
         const target = msg.split(' ')[2];
         socket.emit('adminExplode', { target });
     }
-    if (msg.startsWith('/e fly ') && nickname === 'notrealregi') {
-        const target = msg.split(' ')[2];
-        socket.emit('adminFly', { target });
-    }
     if (msg && socket && socket.connected) {
         socket.emit('chat', msg);
         input.value = '';
@@ -122,8 +121,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // Listen for chat messages from server
 if (typeof socket !== 'undefined' && socket) {
-    socket.on('chat', ({ playerId: chatPlayerId, message }) => {
-        appendChatBoxMessage(chatPlayerId, message);
+    socket.on('chat', ({ playerId: chatPlayerId, nickname, message }) => {
+        appendChatBoxMessage(nickname, message);
         showBubbleChat(chatPlayerId, message);
     });
 }
@@ -723,7 +722,7 @@ socket.on('danielEvent', () => {
     setTimeout(() => {
         img.remove();
         danielAudio.pause();
-    }, 15000);
+    }, 5000);
 });
 
 // Admin commands
@@ -732,28 +731,12 @@ socket.on('adminExplode', ({ target }) => {
         spawnExplosion(player.position.clone());
         respawnPlayer();
     }
-});
-socket.on('adminFly', ({ target }) => {
-    if (nickname === target) {
-        isFlying = true;
-        // Efeito visual: adicione um highlight
-        player.traverse(child => {
-            if (child.isMesh) {
-                child.material.emissive = new THREE.Color(0x00ffff);
-                child.material.emissiveIntensity = 0.5;
-            }
-        });
-        // Remova o efeito após 10 segundos (exemplo)
-        setTimeout(() => {
-            isFlying = false;
-            player.traverse(child => {
-                if (child.isMesh) {
-                    child.material.emissive = new THREE.Color(0x000000);
-                    child.material.emissiveIntensity = 0;
-                }
-            });
-        }, 10000);
-    }
+    // Opcional: efeito visual nos outros players
+    Object.values(otherPlayers).forEach(p => {
+        if (p.userData.nickname === target) {
+            spawnExplosion(p.position.clone());
+        }
+    });
 });
 }
 
@@ -1823,25 +1806,39 @@ function animate() {
 
     // EQUIP animação
     if (remotePlayer.userData.isEquipping) {
-        remotePlayer.userData.equipAnimProgress += delta;
-        const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
-        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, equipTargetRotation, t);
-    }
+    remotePlayer.userData.equipAnimProgress += delta;
+    const t = Math.min(remotePlayer.userData.equipAnimProgress / equipAnimDuration, 1);
+    const start = (typeof remotePlayer.userData.equipStartRotation === 'number') ? remotePlayer.userData.equipStartRotation : remotePlayer.rightArm.rotation.x;
+    const target = (typeof remotePlayer.userData.equipTargetRotation === 'number') ? remotePlayer.userData.equipTargetRotation : equipTargetRotation;
+    remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(start, target, t);
 
-    // UNEQUIP animação
-    if (remotePlayer.userData.isUnequipping) {
-        remotePlayer.userData.unequipAnimProgress += delta;
-        const t = Math.min(remotePlayer.userData.unequipAnimProgress / equipAnimDuration, 1);
-        remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightArm.rotation.x, 0, t);
-        if (t >= 1) {
-            remotePlayer.userData.isUnequipping = false;
-            remotePlayer.rightArm.rotation.x = 1; // <-- Garante que o braço volta ao normal
+    if (t >= 1) {
+    remotePlayer.userData.isEquipping = false;
+    remotePlayer.userData.isEquipped = true; // <--- novo
+    remotePlayer.rightArm.rotation.x = target; // braço reto
+}
+}
 
-            // Remove modelo da mão
-            if (model.parent) model.parent.remove(model);
-            model.visible = false;
-        }
-    }
+// UNEQUIP animação
+if (remotePlayer.userData.isUnequipping) {
+    remotePlayer.userData.unequipAnimProgress += delta;
+    const t = Math.min(remotePlayer.userData.unequipAnimProgress / equipAnimDuration, 1);
+    const start = (typeof remotePlayer.userData.unequipStartRotation === 'number') ? remotePlayer.userData.unequipStartRotation : remotePlayer.rightArm.rotation.x;
+    const target = (typeof remotePlayer.userData.unequipTargetRotation === 'number') ? remotePlayer.userData.unequipTargetRotation : 0;
+    remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(start, target, t);
+
+    if (t >= 1) {
+    remotePlayer.userData.isUnequipping = false;
+    remotePlayer.userData.isEquipped = false; // <--- solta arma
+    remotePlayer.rightArm.rotation.x = target; // volta pro normal
+    if (model && model.parent) model.parent.remove(model);
+    if (model) model.visible = false;
+}
+}
+
+if (remotePlayer.userData.isEquipped) {
+    remotePlayer.rightArm.rotation.x = equipTargetRotation; // mantém arma levantada
+}
 }
 
 
@@ -2174,12 +2171,14 @@ window.addEventListener('click', launchRocket);
 function addHatToPlayer(player, hatId) {
     // Remove chapéu antigo se houver
     if (player.userData.currentHat) {
-        if ( player.userData.currentHat.parent) {
-            player.userData.currentHat.parent.remove(player.userData.currentHat);
-        }
-        player.userData.currentHat = null;
-        player.userData.currentHatId = null;
+    if (player.userData.currentHat.parent) {
+        player.userData.currentHat.parent.remove(player.userData.currentHat);
+    } else {
+        console.warn("Chapéu antigo sem parent, pode estar bugado:", player.userData.currentHatId);
     }
+    player.userData.currentHat = null;
+    player.userData.currentHatId = null;
+}
     if (!hatId) return;
 
    
@@ -2198,12 +2197,13 @@ function addHatToPlayer(player, hatId) {
         const hat = gltf.scene;
         // Ajuste escala e posição conforme o chapéu
         if (hatId === 'hat_red' || hatId === 'hat_fedora_black') {
-            hat.scale.set(0.3, 0.3, 0.3);
-            hat.position.set(0, 1.08, 0.05);
+            hat.scale.set(1, 1, 1);             // tamanho original
+    hat.position.set(0, 0.256, -0.4);       // encaixe no head
+    hat.rotation.set(1.9, Math.PI / 2, 0);
         } else if (hatId === 'hat_doge') {
-            hat.scale.set(0.4, 0.4, 0.4);
-            hat.position.set(0, 0.8, 0);   
-            hat.rotation.y = Math.PI / 2.5;
+            hat.scale.set(1, 1, 1);
+            hat.position.set(0, 0.2, 0);
+            hat.rotation.set(2, Math.PI, 0); // gira 180 graus no Y
         }
         // Encontre a cabeça do player
         let head = null;
@@ -2217,6 +2217,15 @@ function addHatToPlayer(player, hatId) {
         }
     });
 }
+
+window.addEventListener('rogold_equipped_hat_changed', () => {
+    const hatId = localStorage.getItem('rogold_equipped_hat'); // 'hat_red', 'hat_doge', etc.
+    if (hatId) {
+        addHatToPlayer(player, hatId);
+    } else {
+        addHatToPlayer(player, null); // remove chapéu se não tiver
+    }
+});
 
 function attachRocketLauncherToArm(arm, model) {
     model.position.set(0, -1, 0.5);
