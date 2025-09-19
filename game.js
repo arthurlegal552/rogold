@@ -3,7 +3,6 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as CANNON from 'cannon-es';
-import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
 let scene, camera, renderer, controls;
 let player, velocity, direction;
@@ -94,6 +93,53 @@ function sendChatMessage() {
         input.value = '';
     }
 }
+
+function showNameTag(playerId, nickname) {
+    let targetPlayer = playerId === playerId ? player : otherPlayers[playerId];
+    if (!targetPlayer) return;
+
+    // Tenta achar a cabeça
+    let headMesh = null;
+    targetPlayer.traverse(child => {
+        if (child.isMesh && child.name === "Head") {
+            headMesh = child;
+        }
+    });
+    const target = headMesh || targetPlayer;
+
+    // Cria o elemento HTML
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'nameTag';
+    nameDiv.textContent = nickname;
+    nameDiv.style.position = 'absolute';
+    nameDiv.style.color = 'white';
+    nameDiv.style.fontSize = '14px';
+    nameDiv.style.fontFamily = 'Comic Sans MS, Arial, sans-serif';
+    nameDiv.style.textShadow = '1px 1px 2px black';
+    nameDiv.style.fontWeight = 'bold';
+    nameDiv.style.pointerEvents = 'none';
+    document.body.appendChild(nameDiv);
+
+    // Atualiza posição na tela
+    function updatePosition() {
+        let worldPos = new THREE.Vector3();
+        target.getWorldPosition(worldPos);
+        worldPos.y += 2.8; // altura acima da cabeça
+
+        let screenPos = worldPos.clone().project(camera);
+        let x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+        let y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+
+        nameDiv.style.left = `${x - nameDiv.offsetWidth / 2}px`;
+        nameDiv.style.top = `${y - nameDiv.offsetHeight}px`;
+    }
+
+    let interval = setInterval(updatePosition, 16);
+
+    // Salva no objeto do jogador pra poder remover depois
+    targetPlayer.userData.nameTag = { element: nameDiv, updater: interval };
+}
+
 
 // Listen for chat messages from server
 // Ensure this runs after DOM is loaded
@@ -202,11 +248,11 @@ function createPlayer(headModel) {
     const playerGroup = new THREE.Group();
     playerGroup.name = "Player";
 
-    addNameTagToPlayer(playerGroup, nickname); // para você
-
     // Materials - Classic Roblox "noob" colors
     const torsoMaterial = new THREE.MeshLambertMaterial({ color: 0x00A2FF }); // Blue
     const legMaterial = new THREE.MeshLambertMaterial({ color: 0x80C91C }); // Green
+
+    showNameTag(playerId, nickname);
 
     // Arm Materials - with stud texture on top and bottom
     const textureLoader = new THREE.TextureLoader();
@@ -386,7 +432,7 @@ function createRemotePlayer(headModel, playerData) {
     updatePlayerColors(playerGroup, playerData.colors);
     if (playerData.hatId) addHatToPlayer(playerGroup, playerData.hatId);
 
-    addNameTagToPlayer(playerGroup, playerData.nickname); // para outros players
+    showNameTag(playerData.id, playerData.nickname);
 
     // Salve o nickname para uso na lista
     playerGroup.userData.nickname = playerData.nickname || "Guest";
@@ -611,13 +657,17 @@ function initSocket() {
         // This is now handled by 'gameState'
     });
     
-    socket.on('playerLeft', (playerId) => {
-        if (otherPlayers[playerId]) {
-            scene.remove(otherPlayers[playerId]);
-            delete otherPlayers[playerId];
-            // Update player count is now handled by gameState
+    socket.on('playerLeft', (id) => {
+    if (otherPlayers[id]) {
+        if (otherPlayers[id].userData.nameTag) {
+            clearInterval(otherPlayers[id].userData.nameTag.updater);
+            otherPlayers[id].userData.nameTag.element.remove();
         }
-    });
+        scene.remove(otherPlayers[id]);
+        delete otherPlayers[id];
+    }
+});
+
 
     socket.on('dance', (dancerId) => {
         if (dancerId && otherPlayers[dancerId]) {
@@ -785,12 +835,6 @@ function initGame() {
         1000
     );
     camera.position.y = 10;
-
-    const labelRenderer = new CSS2DRenderer();
-labelRenderer.setSize(window.innerWidth, window.innerHeight);
-labelRenderer.domElement.style.position = 'absolute';
-labelRenderer.domElement.style.top = '0px';
-document.body.appendChild(labelRenderer.domElement);
 
     renderer = new THREE.WebGLRenderer({
         canvas: document.getElementById('game-canvas'),
@@ -1562,23 +1606,6 @@ function startDance() {
     playDanceSoundAt(player);
 }
 
-function addNameTagToPlayer(playerGroup, nickname) {
-    const div = document.createElement('div');
-    div.className = 'nameTag';
-    div.textContent = nickname;
-    div.style.fontSize = '14px';
-    div.style.color = 'white';
-    div.style.fontFamily = 'Comic Sans MS, Arial, sans-serif';
-    div.style.textShadow = '1px 1px 2px black';
-    
-    const label = new CSS2DObject(div);
-    label.position.set(0, 3.5, 0); // altura acima da cabeça
-    playerGroup.add(label);
-    
-    return label;
-}
-
-
 function stopDance() {
     if (!isDancing) return;
     isDancing = false;
@@ -1766,10 +1793,6 @@ function animate() {
     const time = performance.now();
     const delta = (time - prevTime) / 1000;
     const fixedTimeStep = 1 / 60; // 60 FPS
-
-    renderer.render(scene, camera);
-labelRenderer.render(scene, camera);
-
 
     for (let i = explodingParticles.length - 1; i >= 0; i--) {
     const particle = explodingParticles[i];
