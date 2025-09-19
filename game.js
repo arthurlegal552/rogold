@@ -1581,28 +1581,6 @@ function playDanceSoundAt(playerObject) {
     playerObject.add(sound); // O som segue o player
 }
 
-function startLoadingScreen() {
-    const studsTotal = 5210; // número total fake de studs
-    let currentStuds = 0;
-    const studsText = document.getElementById('loading-studs');
-
-    const interval = setInterval(() => {
-        currentStuds += Math.floor(Math.random() * 60) + 30; // velocidade aleatória
-        if (currentStuds >= studsTotal) {
-            currentStuds = studsTotal;
-            clearInterval(interval);
-
-            // Esconde a tela após carregar
-            setTimeout(() => {
-                document.getElementById('loading-screen').style.display = 'none';
-            }, 800);
-        }
-        studsText.textContent = `Loading Studs: ${currentStuds}/${studsTotal}`;
-    }, 40);
-}
-
-startLoadingScreen();
-
 
 
 let equippedTool = null;

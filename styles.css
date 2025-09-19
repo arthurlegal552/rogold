@@ -495,37 +495,6 @@ body {
     font-size: 18px;
 }
 
-#loading-screen {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100vw; height: 100vh;
-  background: rgba(255, 255, 255, 0.85); /* branco translúcido */
-  color: #000;
-  font-family: Verdana, Tahoma, sans-serif;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-}
-
-#loading-box {
-  background: rgba(255, 255, 255, 0.95);
-  border: 2px solid #000;
-  padding: 20px 40px;
-  text-align: center;
-  box-shadow: 0 0 10px rgba(0,0,0,0.4);
-}
-
-#loading-text {
-  font-size: 22px;
-  font-weight: bold;
-  margin-bottom: 15px;
-}
-
-#loading-studs {
-  font-size: 18px;
-}
-
 
 
 @media (max-width: 768px), (pointer: coarse) {
