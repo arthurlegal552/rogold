@@ -930,38 +930,17 @@ function initGame() {
         player.position.set(0, 3, 0);
         scene.add(player);
 
-       let pointerControls;
-let isFreeCamera = false;
-
-controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, player.position.y + 1, 0);
-controls.enableDamping = false;
-controls.enableZoom = false;
-controls.minDistance = 5;
-controls.maxDistance = 50;
-controls.maxPolarAngle = Math.PI / 2;
-controls.enableRotate = false; 
-controls.enablePan = false;
-
-// PointerLockControls (livre com o mouse)
-pointerControls = new PointerLockControls(camera, document.body);
-
-document.addEventListener("keydown", (event) => {
-    if (event.code === "KeyE") {
-        // Ativa câmera livre
-        if (!isFreeCamera) {
-            pointerControls.lock();
-            isFreeCamera = true;
-        }
-    }
-    if (event.code === "KeyQ") {
-        // Sai da câmera livre e volta pro Orbit
-        if (isFreeCamera) {
-            pointerControls.unlock();
-            isFreeCamera = false;
-        }
-    }
-});
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, player.position.y + 1, 0);
+        controls.enableDamping = false;
+        controls.enableZoom = false; 
+        controls.minDistance = 5;
+        controls.maxDistance = 50;
+        controls.maxPolarAngle = Math.PI / 2;
+        controls.screenSpacePanning = false;
+        controls.enableRotate = false;
+        controls.enablePan = false;
+        
         camera.position.set(0, 10, 15);
 
         cameraOffset = new THREE.Vector3(0, 5, 15);
