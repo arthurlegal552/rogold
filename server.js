@@ -62,23 +62,21 @@ io.on('connection', (socket) => {
         activeNicknames[socket.id] = nickname;
         socket.nickname = nickname;
 
-// quando criar o player (no register)
-players[socket.id] = {
-    id: socket.id,
-    nickname: nickname,
-    x: 0, y: 3, z: 0,
-    rotation: 0,
-    isMoving: false,
-    colors: {
-        head: '#FAD417',
-        torso: '#00A2FF',
-        arms: '#FAD417',
-        legs: '#80C91C'
-    },
-    hatId: null,
-    clothes: null // <<< novo campo
-};
-
+        // Cria player
+        players[socket.id] = {
+            id: socket.id,
+            nickname: nickname,
+            x: 0, y: 3, z: 0,
+            rotation: 0,
+            isMoving: false,
+            colors: {
+                head: '#FAD417',
+                torso: '#00A2FF',
+                arms: '#FAD417',
+                legs: '#80C91C'
+            },
+            hatId: null
+        };
 
         // Envia todos os players para o novo
         socket.emit('initialPlayers', players);
@@ -100,25 +98,11 @@ players[socket.id] = {
     });
 
     // CUSTOMIZAÇÃO
-    // Recebe customização (cores/roupas) do cliente
-socket.on('playerCustomize', (data) => {
-    if (!players[socket.id]) return;
-    // Se mandou cores, atualiza
-    if (data.colors) players[socket.id].colors = data.colors;
-    // Se mandou roupa (apenas id da roupa)
-    if (data.clothesId !== undefined) players[socket.id].clothes = data.clothesId;
-    // se mandou chapéu (compatível com código existente)
-    if (data.hatId !== undefined) players[socket.id].hatId = data.hatId;
-
-    // retransmite pra todo mundo (inclui id do player)
-    io.emit('playerCustomize', {
-        playerId: socket.id,
-        clothesId: players[socket.id].clothes,
-        colors: players[socket.id].colors,
-        hatId: players[socket.id].hatId
+    socket.on('playerCustomize', (colors) => {
+        if (players[socket.id]) {
+            players[socket.id].colors = colors;
+        }
     });
-});
-
 
     // CHAPÉU
     socket.on('equipHat', ({ hatId }) => {

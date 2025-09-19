@@ -621,15 +621,6 @@ function initSocket() {
         }
     });
 
-    socket.on('playerCustomize', (data) => {
-    const targetPlayer = otherPlayers[data.id] || (data.id === playerId ? player : null);
-    if (targetPlayer) {
-        updatePlayerColors(targetPlayer, data.colors);
-        updatePlayerClothes(targetPlayer, data.clothes);
-    }
-});
-
-
     // Quando outro player equipa
 socket.on("remoteEquip", (data) => {
     if (data.playerId === playerId) {
@@ -2176,26 +2167,6 @@ window.addEventListener('mousemove', (event) => {
 });
 
 window.addEventListener('click', launchRocket);
-
-function updatePlayerClothes(player, clothes) {
-    if (!player || !clothes) return;
-
-    const loader = new THREE.TextureLoader();
-
-    player.traverse(child => {
-        if (child.isMesh) {
-            if (child.name === "Torso" && clothes.shirt) {
-                child.material.map = loader.load(clothes.shirt);
-                child.material.needsUpdate = true;
-            }
-            if (child.name === "Leg" && clothes.pants) {
-                child.material.map = loader.load(clothes.pants);
-                child.material.needsUpdate = true;
-            }
-        }
-    });
-}
-
 
 function addHatToPlayer(player, hatId) {
     // Remove chapéu antigo se houver

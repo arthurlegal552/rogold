@@ -2176,85 +2176,6 @@ function hideCreateBlogForm() {
     setActiveNavLink('community-link'); 
 }
 
-// ---- Clothes catalog (paths: crie estas imagens nas pastas shirts/ e pants/) ----
-const clothesCatalog = {
-  classic: { shirt: 'shirts/classic_shirt.png', pants: 'pants/classic_pants.png' },
-  red:     { shirt: 'shirts/red_shirt.png',     pants: 'pants/red_pants.png' },
-  blue:    { shirt: 'shirts/blue_shirt.png',    pants: 'pants/blue_pants.png' }
-};
-
-// cria botão e menu
-function setupClothesUI() {
-  const container = document.querySelector('.game-ui');
-  if (!container) return;
-
-  // botão
-  const btn = document.createElement('button');
-  btn.id = 'clothes-btn';
-  btn.textContent = 'Clothes';
-  btn.className = 'retro-btn';
-  container.appendChild(btn);
-
-  // menu (toggle)
-  btn.addEventListener('click', () => {
-    const existing = document.getElementById('clothes-menu');
-    if (existing) { existing.remove(); return; }
-
-    const menu = document.createElement('div');
-    menu.id = 'clothes-menu';
-    menu.className = 'color-customizer';
-    menu.style.zIndex = 120;
-    menu.innerHTML = `<h3>Roupas</h3>`;
-    Object.keys(clothesCatalog).forEach(id => {
-      const opt = document.createElement('div');
-      opt.className = 'potion-option';
-      opt.dataset.id = id;
-      opt.textContent = id.toUpperCase();
-      opt.style.cursor = 'pointer';
-      opt.addEventListener('click', () => {
-        // salva local e notifica outros sistemas
-        localStorage.setItem('rogold_equipped_clothes', id);
-        window.dispatchEvent(new Event('rogold_equipped_clothes_changed'));
-
-        // envia para o servidor (se conectado)
-        if (window.socket && window.socket.connected) {
-          window.socket.emit('playerCustomize', { clothesId: id });
-        }
-      });
-      menu.appendChild(opt);
-    });
-
-    // botão de remover roupa
-    const remove = document.createElement('div');
-    remove.className = 'potion-option';
-    remove.textContent = 'REMOVER';
-    remove.addEventListener('click', () => {
-      localStorage.removeItem('rogold_equipped_clothes');
-      window.dispatchEvent(new Event('rogold_equipped_clothes_changed'));
-      if (window.socket && window.socket.connected) {
-        window.socket.emit('playerCustomize', { clothesId: null });
-      }
-    });
-    menu.appendChild(remove);
-
-    container.appendChild(menu);
-  });
-}
-
-// chama no carregamento
-window.addEventListener('DOMContentLoaded', () => {
-  setupClothesUI();
-  // se já tiver roupa salva, notifica para aplicar localmente
-  if (localStorage.getItem('rogold_equipped_clothes')) {
-    window.dispatchEvent(new Event('rogold_equipped_clothes_changed'));
-    // também tenta enviar ao servidor caso já conectado
-    if (window.socket && window.socket.connected) {
-      window.socket.emit('playerCustomize', { clothesId: localStorage.getItem('rogold_equipped_clothes') });
-    }
-  }
-});
-
-
 // Re-defining these for clarity in global scope if called from HTML inline
 window.openLoginModal = openLoginModal;
 window.openRegisterModal = openRegisterModal;
@@ -2276,11 +2197,10 @@ window.sendFriendRequest = sendFriendRequest;
 window.acceptFriendRequest = acceptFriendRequest; 
 window.declineFriendRequest = declineFriendRequest;
 
-
 // Coin Reward Timer Logic
 let coinRewardIntervalId = null;
 const COIN_REWARD_AMOUNT = 500;
-const COIN_REWARD_INTERVAL_MS = 20 * 60 * 1000; // 20 minutes
+const COIN_REWARD_INTERVAL_MS = 1 * 60 * 1000; // 20 minutes
 
 function startCoinRewardTimer() {
     // Clear any existing timer to prevent multiple timers running
