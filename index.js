@@ -2176,6 +2176,40 @@ function hideCreateBlogForm() {
     setActiveNavLink('community-link'); 
 }
 
+const clothes = {
+    "classic": { shirt: "shirts/classic.png", pants: "pants/classic.png" },
+    "red":     { shirt: "shirts/red.png", pants: "pants/red.png" },
+    "blue":    { shirt: "shirts/blue.png", pants: "pants/blue.png" }
+};
+
+function openClothesMenu() {
+    const container = document.createElement("div");
+    container.className = "clothes-customizer";
+    container.innerHTML = `
+        <h3>Customize Clothes</h3>
+        ${Object.keys(clothes).map(c => `
+            <div class="clothes-option" data-id="${c}">
+                ${c.toUpperCase()}
+            </div>
+        `).join("")}
+    `;
+    document.body.appendChild(container);
+
+    container.querySelectorAll(".clothes-option").forEach(opt => {
+        opt.addEventListener("click", () => {
+            const id = opt.dataset.id;
+            localStorage.setItem("rogold_equipped_clothes", id);
+
+            // avisa o servidor
+            if (socket) {
+                socket.emit("playerCustomize", {
+                    clothes: clothes[id]
+                });
+            }
+        });
+    });
+}
+
 // Re-defining these for clarity in global scope if called from HTML inline
 window.openLoginModal = openLoginModal;
 window.openRegisterModal = openRegisterModal;
@@ -2196,6 +2230,13 @@ window.openBlog = openBlog;
 window.sendFriendRequest = sendFriendRequest; 
 window.acceptFriendRequest = acceptFriendRequest; 
 window.declineFriendRequest = declineFriendRequest;
+
+const clothesBtn = document.createElement("button");
+clothesBtn.textContent = "Clothes";
+clothesBtn.className = "retro-btn";
+clothesBtn.onclick = openClothesMenu;
+document.querySelector(".stylefront-ui").appendChild(clothesBtn);
+
 
 // Coin Reward Timer Logic
 let coinRewardIntervalId = null;
