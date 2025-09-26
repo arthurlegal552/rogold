@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROGOLD</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+    .bubble-chat {
+    font-family: Arial, sans-serif;
+    pointer-events: none;
+    user-select: none;
+    }
+    </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/",
+            "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
+        }
+    }
+    </script>
+</head>
+<body>
+    <div id="game-container">
+        <div class="game-ui">
+            <div class="health-bar">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span style="color: #AAA;">Health</span>
+                    <span style="color: #0F0;"><span id="health-text">100</span>/100</span>
+                </div>
+                <div class="health-fill" id="health-fill"></div>
+            </div>
+                <div id="chat-container">
+        <div id="chat-box"></div>
+        <input type="text" id="chat-input" placeholder="Type your message...">
+        <button id="chat-send">Send</button>
+            </div>
+            <button id="respawn-btn">Respawn</button>
+            <button id="customize-btn">Colors</button>
+            <button id="potions-btn">Potions</button>
+            <button id="controls-mode-btn">Switch Controls</button>
+            <div class="color-customizer" id="color-customizer">
+                <h3>Customize Player</h3>
+                <div class="color-picker-group">
+                    <label for="head-color">Head</label>
+                    <input type="color" id="head-color" value="#FAD417">
+                </div>
+                <div class="color-picker-group">
+                    <label for="torso-color">Torso</label>
+                    <input type="color" id="torso-color" value="#00A2FF">
+                </div>
+                <div class="color-picker-group">
+                    <label for="arm-color">Arms</label>
+                    <input type="color" id="arm-color" value="#FAD417">
+                </div>
+                <div class="color-picker-group">
+                    <label for="leg-color">Legs</label>
+                    <input type="color" id="leg-color" value="#80C91C">
+                </div>
+            </div>
+            <div class="potions-customizer" id="potions-customizer">
+                <h3>Death Sound</h3>
+                <div class="potion-option active" data-sound="classic">Classic Oof</div>
+                <div class="potion-option" data-sound="ouch">Ouch</div>
+            </div>
+             <div class="status-indicator">
+                <span id="online-status">Connecting...</span>
+            </div>
+        </div>
+        <div id="mobile-controls">
+            <div id="joystick-zone"></div>
+            <div id="mobile-buttons">
+                <div class="mobile-camera-controls">
+                     <button id="mobile-rotate-left">⟲</button>
+                     <button id="mobile-rotate-right">⟳</button>
+                </div>
+                <button id="mobile-jump-btn">JUMP</button>
+            </div>
+        </div>
+        <div class="controls-hint">
+            <p>WASD to move • SPACE to jump</p>
+            <p>Q/E to rotate camera</p>
+        </div>
+        <div class="zoom-controls">
+            <button id="zoom-in-btn">+</button>
+            <button id="zoom-out-btn">-</button>
+        </div>
+        <canvas id="game-canvas"></canvas>
+    </div>
+    <div id="player-list-container">
+    <h4>Players</h4>
+    <div class="player-list-header">
+        <span>Players</span>
+        <button id="hide-player-list-btn" class="retro-btn">Hide</button>
+    </div>
+    <ul id="player-list"></ul>
+</div>
+
+
+    <!-- Menu Button -->
+    <button id="menu-btn" class="retro-btn">☰ Menu</button>
+
+    <div id="loading-screen">
+  <div id="loading-box">
+    <div id="loading-text">Loading...</div>
+    <div id="loading-studs">Loading Studs: 0/5210</div>
+  </div>
+</div>
+
+
+
+    <!-- Game Menu Overlay -->
+    <div id="game-menu" class="retro-menu">
+        <h2>Game Menu</h2>
+        <button id="resume-btn" class="retro-btn">Resume</button>
+        <button id="options-btn" class="retro-btn">Options</button>
+        <form action="index.html">
+            <button id="exit-btn" class="retro-btn">Exit</button>
+        </form>
+    </div>
+
+    <button id="equip-tool-btn" class="toolbox" style="margin-top:10px;"><img src="launcher.jpg" alt="launcher"></button>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+    <script type="module" src="game.js"></script>
+</body>
+</html>
