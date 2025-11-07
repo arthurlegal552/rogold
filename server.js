@@ -4,6 +4,25 @@ const socketIo = require('socket.io');
 const path = require('path');
 const helmet = require("helmet");
 const fs = require('fs');
+const {
+    saveGame,
+    getGame,
+    getAllGames,
+    deleteGame,
+    saveGameSync,
+    getGameSync,
+    getAllGamesSync,
+    deleteGameSync,
+    saveMap,
+    getMap,
+    getAllMaps,
+    deleteMap,
+    savePlayer,
+    getPlayer,
+    getPlayerByNickname,
+    getAllNicknames,
+    deletePlayer
+} = require('./database');
 
 const app = express();
 const server = http.createServer(app);
@@ -32,6 +51,12 @@ if (!fs.existsSync(MAPS_DIR)) {
     fs.mkdirSync(MAPS_DIR);
 }
 
+const THUMBNAILS_DIR = path.join(__dirname, 'thumbnails');
+// Ensure thumbnails directory exists
+if (!fs.existsSync(THUMBNAILS_DIR)) {
+    fs.mkdirSync(THUMBNAILS_DIR);
+}
+
 // Load existing player data from file
 if (fs.existsSync(DATA_FILE)) {
     playersData = JSON.parse(fs.readFileSync(DATA_FILE));
@@ -45,6 +70,9 @@ function savePlayersData() {
 // Serve static files
 app.use(express.static(__dirname));
 
+// Serve thumbnails directory
+app.use('/thumbnails', express.static(THUMBNAILS_DIR));
+
 // Routes
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
@@ -55,35 +83,32 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', players: Object.keys(players).length });
 });
 
-// Map persistence API (JSON), stores maps under ./maps as {name}.json
-app.get('/api/maps', (req, res) => {
+// Map persistence API (SQLite database)
+app.get('/api/maps', async (req, res) => {
     try {
-        const files = fs.existsSync(MAPS_DIR) ? fs.readdirSync(MAPS_DIR) : [];
-        const maps = files.filter(f => f.endsWith('.json')).map(f => path.basename(f, '.json'));
+        const maps = await getAllMaps();
         res.json({ maps });
     } catch (e) {
         res.status(500).json({ error: 'Failed to list maps' });
     }
 });
 
-app.get('/api/maps/:name', (req, res) => {
+app.get('/api/maps/:name', async (req, res) => {
     try {
         const safe = String(req.params.name || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 64);
         if (!safe) return res.status(400).json({ error: 'Invalid name' });
-        const filePath = path.join(MAPS_DIR, safe + '.json');
-        if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Not found' });
-        const json = fs.readFileSync(filePath, 'utf8');
-        res.type('application/json').send(json);
+        const mapData = await getMap(safe);
+        if (!mapData) return res.status(404).json({ error: 'Not found' });
+        res.type('application/json').send(JSON.stringify(mapData));
     } catch (e) {
         res.status(500).json({ error: 'Failed to load map' });
     }
 });
 
-app.post('/api/maps/:name', (req, res) => {
+app.post('/api/maps/:name', async (req, res) => {
     try {
         const safe = String(req.params.name || '').replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 64);
         if (!safe) return res.status(400).json({ error: 'Invalid name' });
-        const filePath = path.join(MAPS_DIR, safe + '.json');
         const data = req.body;
         if (!data || typeof data !== 'object') {
             return res.status(400).json({ error: 'Invalid JSON body' });
@@ -91,8 +116,13 @@ app.post('/api/maps/:name', (req, res) => {
         data.name = safe;
         data.updatedAt = new Date().toISOString();
         if (!data.createdAt) data.createdAt = data.updatedAt;
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-        res.json({ ok: true, name: safe });
+
+        const result = await saveMap(safe, data);
+        if (result.success) {
+            res.json({ ok: true, name: safe });
+        } else {
+            res.status(500).json({ error: 'Failed to save map' });
+        }
     } catch (e) {
         res.status(500).json({ error: 'Failed to save map' });
     }
@@ -117,6 +147,113 @@ app.use(
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static("public"));
+
+// Helper function to save data URL as file
+function saveDataUrlAsFile(dataUrl, filename) {
+    return new Promise((resolve, reject) => {
+        try {
+            // Ensure thumbnails directory exists
+            if (!fs.existsSync(THUMBNAILS_DIR)) {
+                fs.mkdirSync(THUMBNAILS_DIR, { recursive: true });
+            }
+
+            // Extract base64 data from data URL
+            const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            if (!matches || matches.length !== 3) {
+                reject(new Error('Invalid data URL'));
+                return;
+            }
+
+            const mimeType = matches[1];
+            const base64Data = matches[2];
+            const buffer = Buffer.from(base64Data, 'base64');
+
+            const filePath = path.join(THUMBNAILS_DIR, filename);
+            fs.writeFile(filePath, buffer, (err) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(filePath);
+                }
+            });
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+// Games API endpoint for publishing (SQLite database)
+app.post('/api/games', async (req, res) => {
+    try {
+        const gameData = req.body;
+        if (!gameData || !gameData.title) {
+            return res.status(400).json({ error: 'Game title is required' });
+        }
+
+        // Generate game ID if not provided
+        const gameId = gameData.gameId || 'game_' + Date.now();
+
+        // Handle thumbnail if it's a data URL
+        if (gameData.thumbnail && gameData.thumbnail.startsWith('data:')) {
+            try {
+                const thumbnailFilename = `${gameId}_thumbnail.png`;
+                await saveDataUrlAsFile(gameData.thumbnail, thumbnailFilename);
+                // Update game data to use file path instead of data URL
+                gameData.thumbnail = `/thumbnails/${thumbnailFilename}`;
+            } catch (error) {
+                console.warn('Failed to save thumbnail as file, using default:', error);
+                gameData.thumbnail = 'thumbnail1.jpg';
+            }
+        } else {
+            gameData.thumbnail = 'thumbnail1.jpg';
+        }
+
+        // Save game data to database
+        const result = await saveGame(gameId, gameData);
+        if (!result.success) {
+            return res.status(500).json({ error: 'Failed to save game' });
+        }
+
+        console.log(`Game "${gameData.title}" published with ID: ${gameId}`);
+
+        res.json({
+            success: true,
+            gameId: gameId,
+            message: 'Game published successfully'
+        });
+    } catch (error) {
+        console.error('Error publishing game:', error);
+        res.status(500).json({ error: 'Failed to publish game' });
+    }
+});
+
+// Get published games (SQLite database)
+app.get('/api/games', async (req, res) => {
+    try {
+        const games = await getAllGames();
+        res.json({ games });
+    } catch (error) {
+        console.error('Error listing games:', error);
+        res.status(500).json({ error: 'Failed to list games' });
+    }
+});
+
+// Get specific game (SQLite database)
+app.get('/api/games/:gameId', async (req, res) => {
+    try {
+        const gameId = req.params.gameId;
+        const gameData = await getGame(gameId);
+
+        if (!gameData) {
+            return res.status(404).json({ error: 'Game not found' });
+        }
+
+        res.json(gameData);
+    } catch (error) {
+        console.error('Error loading game:', error);
+        res.status(500).json({ error: 'Failed to load game' });
+    }
+});
 
 // Store connected players
 let players = {};
@@ -176,7 +313,7 @@ io.on('connection', (socket) => {
                 legs: '#80C91C'
             },
             hatId: null,
-            faceId: faceId || 'default'
+            faceId: faceId || 'OriginalGlitchedFace.webp'
         };
 
         // Envia apenas os players da mesma sala para o novo
@@ -239,7 +376,7 @@ io.on('connection', (socket) => {
     });
     
     // FACE
-    socket.on('equipFace', ({ faceId }) => {
+    socket.on('faceChange', ({ faceId }) => {
         if (players[socket.id]) {
             players[socket.id].faceId = faceId;
         }
@@ -333,6 +470,17 @@ setInterval(() => {
     }
     for (const [r, state] of Object.entries(byRoom)) {
         io.to(r).volatile.emit('gameState', state);
+    }
+
+    // Send initial faces data to new players
+    for (const [r, state] of Object.entries(byRoom)) {
+        const faces = {};
+        for (const [id, p] of Object.entries(state)) {
+            if (p.faceId) faces[id] = p.faceId;
+        }
+        if (Object.keys(faces).length > 0) {
+            io.to(r).emit('initialFaces', faces);
+        }
     }
 }, 1000 / GAME_TICK_RATE);
 

@@ -1,0 +1,110 @@
+{
+  "title": "admin",
+  "scripts": {
+    "script_3": "-- Welcome to RoGold Studio Script Editor!\n-- Write your Lua code here\n\nprint(\"Hello from RoGold Studio!\")\n\n-- Example: Create a simple GUI with Frame, TextLabel, and TextButton\n\n-- Create a ScreenGui to hold our GUI elements\nlocal screenGui = Instance.new(\"ScreenGui\")\nscreenGui.Name = \"ExampleGUI\"\nscreenGui.Parent = game.Players.LocalPlayer.PlayerGui\n\n-- Create a Frame as the main container\nlocal frame = Instance.new(\"Frame\")\nframe.Name = \"MainFrame\"\nframe.Size = UDim2.new(0, 300, 0, 200)\nframe.Position = UDim2.new(0.5, -150, 0.5, -100)\nframe.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)\nframe.BackgroundTransparency = 0.1\nframe.BorderSizePixel = 2\nframe.Parent = screenGui\n\n-- Create a TextLabel to display text\nlocal textLabel = Instance.new(\"TextLabel\")\ntextLabel.Name = \"TitleLabel\"\ntextLabel.Size = UDim2.new(1, -20, 0, 50)\ntextLabel.Position = UDim2.new(0, 10, 0, 10)\ntextLabel.BackgroundColor3 = Color3.new(0.8, 0.8, 0.8)\ntextLabel.Text = \"Welcome to RoGold Studio!\"\ntextLabel.TextColor3 = Color3.new(0, 0, 0)\ntextLabel.TextSize = 18\ntextLabel.Font = Enum.Font.SourceSansBold\ntextLabel.Parent = frame\n\n-- Create a TextButton that can be clicked\nlocal textButton = Instance.new(\"TextButton\")\ntextButton.Name = \"ClickButton\"\ntextButton.Size = UDim2.new(0, 150, 0, 40)\ntextButton.Position = UDim2.new(0.5, -75, 1, -60)\ntextButton.BackgroundColor3 = Color3.new(0.4, 0.6, 1)\ntextButton.Text = \"Click Me!\"\ntextButton.TextColor3 = Color3.new(1, 1, 1)\ntextButton.TextSize = 16\ntextButton.Font = Enum.Font.SourceSans\ntextButton.Parent = frame\n\n-- Connect an event to the button\ntextButton.MouseButton1Click:Connect(function()\n   print(\"Button was clicked!\")\n   textLabel.Text = \"Button Clicked!\"\n   textLabel.TextColor3 = Color3.new(0, 1, 0)\n   wait(2)\n   textLabel.Text = \"Welcome to RoGold Studio!\"\n   textLabel.TextColor3 = Color3.new(0, 0, 0)\nend)\n\nprint(\"GUI created successfully!\")",
+    "Main Script": "-- Welcome to RoGold Studio Script Editor!\n-- Write your Lua code here\n\nprint(\"Hello from RoGold Studio!\")\n\n-- Example: Create a simple GUI with Frame, TextLabel, and TextButton\n\n-- Create a ScreenGui to hold our GUI elements\nlocal screenGui = Instance.new(\"ScreenGui\")\nscreenGui.Name = \"ExampleGUI\"\nscreenGui.Parent = game.Players.LocalPlayer.PlayerGui\n\n-- Create a Frame as the main container\nlocal frame = Instance.new(\"Frame\")\nframe.Name = \"MainFrame\"\nframe.Size = UDim2.new(0, 300, 0, 200)\nframe.Position = UDim2.new(0.5, -150, 0.5, -100)\nframe.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)\nframe.BackgroundTransparency = 0.1\nframe.BorderSizePixel = 2\nframe.Parent = screenGui\n\n-- Create a TextLabel to display text\nlocal textLabel = Instance.new(\"TextLabel\")\ntextLabel.Name = \"TitleLabel\"\ntextLabel.Size = UDim2.new(1, -20, 0, 50)\ntextLabel.Position = UDim2.new(0, 10, 0, 10)\ntextLabel.BackgroundColor3 = Color3.new(0.8, 0.8, 0.8)\ntextLabel.Text = \"Welcome to RoGold Studio!\"\ntextLabel.TextColor3 = Color3.new(0, 0, 0)\ntextLabel.TextSize = 18\ntextLabel.Font = Enum.Font.SourceSansBold\ntextLabel.Parent = frame\n\n-- Create a TextButton that can be clicked\nlocal textButton = Instance.new(\"TextButton\")\ntextButton.Name = \"ClickButton\"\ntextButton.Size = UDim2.new(0, 150, 0, 40)\ntextButton.Position = UDim2.new(0.5, -75, 1, -60)\ntextButton.BackgroundColor3 = Color3.new(0.4, 0.6, 1)\ntextButton.Text = \"Click Me!\"\ntextButton.TextColor3 = Color3.new(1, 1, 1)\ntextButton.TextSize = 16\ntextButton.Font = Enum.Font.SourceSans\ntextButton.Parent = frame\n\n-- Connect an event to the button\ntextButton.MouseButton1Click:Connect(function()\n   print(\"Button was clicked!\")\n   textLabel.Text = \"Button Clicked!\"\n   textLabel.TextColor3 = Color3.new(0, 1, 0)\n   wait(2)\n   textLabel.Text = \"Welcome to RoGold Studio!\"\n   textLabel.TextColor3 = Color3.new(0, 0, 0)\nend)\n\nprint(\"GUI created successfully!\")\n"
+  },
+  "objects": {
+    "part_1": {
+      "ClassName": "Part",
+      "Name": "part_1",
+      "Anchored": true,
+      "CanCollide": true,
+      "Size": [
+        4,
+        4,
+        4
+      ],
+      "Position": [
+        8.09253340852636,
+        3,
+        -4.721269065711358
+      ],
+      "Rotation": [
+        0,
+        0,
+        0
+      ],
+      "Color": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "Transparency": 0,
+      "Source": "",
+      "type": "",
+      "soundId": "",
+      "volume": 0.5,
+      "isPlaying": false
+    },
+    "part_2": {
+      "ClassName": "Part",
+      "Name": "part_2",
+      "Anchored": true,
+      "CanCollide": true,
+      "Size": [
+        4,
+        4,
+        4
+      ],
+      "Position": [
+        -7.900895704268624,
+        3,
+        10.911089526501794
+      ],
+      "Rotation": [
+        0,
+        0,
+        0
+      ],
+      "Color": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "Transparency": 0,
+      "Source": "",
+      "type": "",
+      "soundId": "",
+      "volume": 0.5,
+      "isPlaying": false
+    },
+    "script_3": {
+      "ClassName": "Script",
+      "Name": "script_3",
+      "Anchored": true,
+      "CanCollide": true,
+      "Size": [
+        4,
+        2,
+        2
+      ],
+      "Position": [
+        0,
+        5,
+        0
+      ],
+      "Rotation": [
+        0,
+        0,
+        0
+      ],
+      "Color": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "Transparency": 0,
+      "Source": "-- Welcome to RoGold Studio Script Editor!\n-- Write your Lua code here\n\nprint(\"Hello from RoGold Studio!\")\n\n-- Example: Create a simple GUI with Frame, TextLabel, and TextButton\n\n-- Create a ScreenGui to hold our GUI elements\nlocal screenGui = Instance.new(\"ScreenGui\")\nscreenGui.Name = \"ExampleGUI\"\nscreenGui.Parent = game.Players.LocalPlayer.PlayerGui\n\n-- Create a Frame as the main container\nlocal frame = Instance.new(\"Frame\")\nframe.Name = \"MainFrame\"\nframe.Size = UDim2.new(0, 300, 0, 200)\nframe.Position = UDim2.new(0.5, -150, 0.5, -100)\nframe.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)\nframe.BackgroundTransparency = 0.1\nframe.BorderSizePixel = 2\nframe.Parent = screenGui\n\n-- Create a TextLabel to display text\nlocal textLabel = Instance.new(\"TextLabel\")\ntextLabel.Name = \"TitleLabel\"\ntextLabel.Size = UDim2.new(1, -20, 0, 50)\ntextLabel.Position = UDim2.new(0, 10, 0, 10)\ntextLabel.BackgroundColor3 = Color3.new(0.8, 0.8, 0.8)\ntextLabel.Text = \"Welcome to RoGold Studio!\"\ntextLabel.TextColor3 = Color3.new(0, 0, 0)\ntextLabel.TextSize = 18\ntextLabel.Font = Enum.Font.SourceSansBold\ntextLabel.Parent = frame\n\n-- Create a TextButton that can be clicked\nlocal textButton = Instance.new(\"TextButton\")\ntextButton.Name = \"ClickButton\"\ntextButton.Size = UDim2.new(0, 150, 0, 40)\ntextButton.Position = UDim2.new(0.5, -75, 1, -60)\ntextButton.BackgroundColor3 = Color3.new(0.4, 0.6, 1)\ntextButton.Text = \"Click Me!\"\ntextButton.TextColor3 = Color3.new(1, 1, 1)\ntextButton.TextSize = 16\ntextButton.Font = Enum.Font.SourceSans\ntextButton.Parent = frame\n\n-- Connect an event to the button\ntextButton.MouseButton1Click:Connect(function()\n   print(\"Button was clicked!\")\n   textLabel.Text = \"Button Clicked!\"\n   textLabel.TextColor3 = Color3.new(0, 1, 0)\n   wait(2)\n   textLabel.Text = \"Welcome to RoGold Studio!\"\n   textLabel.TextColor3 = Color3.new(0, 0, 0)\nend)\n\nprint(\"GUI created successfully!\")",
+      "type": "script",
+      "soundId": "",
+      "volume": 0.5,
+      "isPlaying": false
+    }
+  },
+  "timestamp": "2025-10-28T14:29:13.813Z",
+  "version": "1.0",
+  "published": true,
+  "gameId": "game_1761661753813",
+  "thumbnail": "thumbnail1.jpg"
+}

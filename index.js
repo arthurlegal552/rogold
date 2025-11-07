@@ -84,6 +84,38 @@ class UserManager {
 
 const userManager = new UserManager();
 
+// Catalog Management
+class CatalogManager {
+    constructor() {
+        this.items = [
+            // Only 3D items with modelPath and a corresponding imageUrl (thumbnail)
+            { id: 'hat_red', name: 'Boné Vermelho R', type: 'hat', price: 100, imageUrl: 'hat_red_thumbnail.jpg', modelPath: 'roblox_r_baseball_cap_r6.glb' },
+            { id: 'hat_doge', name: 'Chapéu Doge', type: 'hat', price: 500, imageUrl: 'hat_doge_thumbnail.jpg', modelPath: 'doge_roblox_hat.glb' },
+            { id: 'hat_fedora_black', name: 'Fedora Preta', type: 'hat', price: 300, imageUrl: 'hat_fedora_black_thumbnail.jpg', modelPath: 'roblox_fedora.glb' },
+            // Face items
+            { id: 'face_default', name: 'Default Face', type: 'face', price: 0, imageUrl: 'OriginalGlitchedFace.webp', modelPath: null },
+            { id: 'face_epic', name: 'Epic Face', type: 'face', price: 100, imageUrl: 'epicface.png', modelPath: null }
+        ]
+    }
+
+    getAllItems() {
+        return this.items;
+    }
+
+    getItemsByType(type) {
+        if (type === 'all') {
+            return this.items;
+        }
+        return this.items.filter(item => item.type === type);
+    }
+
+    getItemById(id) {
+        return this.items.find(item => item.id === id);
+    }
+}
+
+const catalogManager = new CatalogManager();
+
 // Profile functionality
 class ProfileManager {
     constructor(userManager) {
@@ -538,7 +570,7 @@ class ThreeDViewer {
         const newCenter = newBox.getCenter(new THREE.Vector3());
 
         // Apply a universal scale to make models roughly 'targetHeight' tall for consistent viewing
-        const targetHeight = 0.5; // Changed from 2.0 to 1.0
+        const targetHeight = 2.0; // For avatar viewer
         if (newSize.y > 0) { // Avoid division by zero
             const scaleFactor = targetHeight / newSize.y;
             model.scale.multiplyScalar(scaleFactor);
@@ -565,16 +597,6 @@ class ThreeDViewer {
         this.camera.updateProjectionMatrix();
 
         this.controls.update();
-    }
-
-    // New: Applies fixed rotation for models with export issues (Z-up vs Y-up)
-    _applyIntrinsicModelTransforms(model, modelPath) {
-        const commonRotationX = Math.PI / 2; // Rotate 90 degrees around X to orient correctly (Z-up to Y-up)
-
-        // Apply this rotation to all GLB models that are known to be Z-up exports
-        if (modelPath.includes('.glb') && !modelPath.includes('player.glb')) { // Don't rotate player.glb
-            model.rotation.set(commonRotationX, 0, 0); 
-        }
     }
 
     // New: Positions and scales accessories relative to the avatar
@@ -622,7 +644,20 @@ class ThreeDViewer {
     accessoryModel.rotation.z = rotation.z;
 
     // adiciona ao avatar
-    this.currentModel.add(accessoryModel);
+    if (accessoryType === 'hat') {
+        // Find head
+        let head = null;
+        this.currentModel.traverse(child => {
+            if (child.isMesh && child.name === "Head") head = child;
+        });
+        if (head) {
+            head.add(accessoryModel);
+        } else {
+            this.currentModel.add(accessoryModel);
+        }
+    } else {
+        this.currentModel.add(accessoryModel);
+    }
 }
 
 
@@ -656,41 +691,204 @@ class ThreeDViewer {
     }
 }
 
-// Global 3D viewer instances
-// This variable will hold the instance of our ThreeDViewer class for the avatar.
-let avatar3DViewer = null; 
+// Global 3D viewer instances removed
 
-// Catalog Management
-class CatalogManager {
-    constructor() {
-        this.items = [
-            // Only 3D items with modelPath and a corresponding imageUrl (thumbnail)
-            { id: 'hat_red', name: 'Boné Vermelho R', type: 'hat', price: 100, imageUrl: 'hat_red_thumbnail.jpg', modelPath: 'roblox_r_baseball_cap_r6.glb' },
-            { id: 'hat_doge', name: 'Chapéu Doge', type: 'hat', price: 500, imageUrl: 'hat_doge_thumbnail.jpg', modelPath: 'doge_roblox_hat.glb' },
-            { id: 'hat_fedora_black', name: 'Fedora Preta', type: 'hat', price: 300, imageUrl: 'hat_fedora_black_thumbnail.jpg', modelPath: 'roblox_fedora.glb' },
-            // Face items
-            { id: 'face_default', name: 'Default Face', type: 'face', price: 0, imageUrl: 'OriginalGlitchedFace.webp', modelPath: null },
-            { id: 'face_epic', name: 'Epic Face', type: 'face', price: 100, imageUrl: 'thumbnail1.jpg', modelPath: null }
-        ]
-    }
+function createPlayer(headModel) {
 
-    getAllItems() {
-        return this.items;
-    }
+    const playerGroup = new THREE.Group();
+    playerGroup.name = "Player";
 
-    getItemsByType(type) {
-        if (type === 'all') {
-            return this.items;
-        }
-        return this.items.filter(item => item.type === type);
-    }
+    // Materials - Classic Roblox "noob" colors
+    const torsoMaterial = new THREE.MeshLambertMaterial({ color: 0x00A2FF }); // Blue
+    const legMaterial = new THREE.MeshLambertMaterial({ color: 0x80C91C }); // Green
 
-    getItemById(id) {
-        return this.items.find(item => item.id === id);
+    // Arm Materials - with stud texture on top and bottom
+    const textureLoader = new THREE.TextureLoader();
+
+    const topStudsTexture = textureLoader.load('roblox-stud.png');
+    topStudsTexture.wrapS = THREE.RepeatWrapping;
+    topStudsTexture.wrapT = THREE.RepeatWrapping;
+    topStudsTexture.repeat.set(1, 1);
+
+    const bottomStudsTexture = textureLoader.load('Studdown.png');
+    bottomStudsTexture.wrapS = THREE.RepeatWrapping;
+    bottomStudsTexture.wrapT = THREE.RepeatWrapping;
+    bottomStudsTexture.repeat.set(1, 1);
+
+    const armTopMaterial = new THREE.MeshLambertMaterial({ color: 0xFAD417, map: topStudsTexture });
+    armTopMaterial.name = "ArmTop"; // For color changing
+
+    const armBottomMaterial = new THREE.MeshLambertMaterial({ color: 0xFAD417, map: bottomStudsTexture });
+    armBottomMaterial.name = "ArmBottom"; // For color changing
+
+    const armSidesMaterial = new THREE.MeshLambertMaterial({ color: 0xFAD417 });
+    armSidesMaterial.name = "ArmSides"; // For color changing
+
+    const armMaterials = [
+        armSidesMaterial, // right
+        armSidesMaterial, // left
+        armTopMaterial,   // top
+        armBottomMaterial, // bottom
+        armSidesMaterial, // front
+        armSidesMaterial  // back
+    ];
+
+    // Torso
+    const torsoGeometry = new THREE.BoxGeometry(2, 2, 1);
+    const torso = new THREE.Mesh(torsoGeometry, torsoMaterial);
+    torso.castShadow = false;
+    torso.receiveShadow = false;
+    torso.name = "Torso"; // Name for easy selection
+    playerGroup.add(torso);
+
+    // Head
+    const head = headModel;
+    head.position.y = 1.7;
+    head.scale.set(1.15, 1.15, 1.15);
+    head.castShadow = false;
+    head.receiveShadow = false;
+    playerGroup.add(head);
+
+    // Face Overlay
+    const faceTextureLoader = new THREE.TextureLoader();
+    let faceId = localStorage.getItem('rogold_equipped_face') || 'default';
+    let faceTexturePath = 'OriginalGlitchedFace.webp';
+    if (faceId === 'face_epic') {
+        faceTexturePath = 'epicface.png';
     }
+    const faceTexture = faceTextureLoader.load(faceTexturePath);
+    faceTexture.minFilter = THREE.NearestFilter;
+    faceTexture.magFilter = THREE.NearestFilter;
+    const faceMaterial = new THREE.MeshLambertMaterial({
+        map: faceTexture,
+        transparent: true,
+        alphaTest: 0.1 // To avoid rendering fully transparent parts
+    });
+    const faceGeometry = new THREE.PlaneGeometry(1.05, 1.05);
+    const facePlane = new THREE.Mesh(faceGeometry, faceMaterial);
+    facePlane.name = "Face"; // For easy selection
+
+    // Position it relative to the head. The head is a cylinder model,
+    // so we place the face on its surface on the Z axis.
+    facePlane.position.set(0, 0, 0.75); // radius of the head model
+    head.add(facePlane);
+
+    // -- Roblox 2006 Badge --
+    const badgeTextureLoader = new THREE.TextureLoader();
+    const badgeTexture = badgeTextureLoader.load('Roblox_icon_2006.svg');
+    const badgeMaterial = new THREE.MeshLambertMaterial({
+        map: badgeTexture,
+        transparent: true,
+        opacity: 1
+    });
+
+    const badgeGeometry = new THREE.PlaneGeometry(0.4, 0.4);
+    const badge = new THREE.Mesh(badgeGeometry, badgeMaterial);
+    badge.position.set(0.6, 0.75, 0.51);
+    badge.rotation.y = 0;
+    torso.add(badge);
+
+    // -- Limbs with Pivots for Animation --
+
+    const armGeometry = new THREE.BoxGeometry(1, 2, 1);
+    const legGeometry = new THREE.BoxGeometry(1, 2, 1);
+
+    // Left Arm
+    const leftArmPivot = new THREE.Group();
+    leftArmPivot.position.set(-1.5, 1, 0); // Shoulder position
+    const leftArm = new THREE.Mesh(armGeometry, armMaterials);
+    leftArm.name = "Arm"; // Name for easy selection
+    leftArm.position.y = -1; // Move down from pivot
+    leftArm.castShadow = false;
+    leftArm.receiveShadow = false;
+    leftArmPivot.add(leftArm);
+    playerGroup.add(leftArmPivot);
+    playerGroup.leftArm = leftArmPivot;
+
+    // Right Arm
+    const rightArmPivot = new THREE.Group();
+    rightArmPivot.position.set(1.5, 1, 0); // Shoulder position
+    const rightArm = new THREE.Mesh(armGeometry, armMaterials);
+    rightArm.name = "Arm"; // Name for easy selection
+    rightArm.position.y = -1; // Move down from pivot
+    rightArm.castShadow = false;
+    rightArm.receiveShadow = false;
+    rightArmPivot.add(rightArm);
+    playerGroup.add(rightArmPivot);
+    playerGroup.rightArm = rightArmPivot;
+
+    // Left Leg
+    const leftLegPivot = new THREE.Group();
+    leftLegPivot.position.set(-0.5, -1, 0); // Hip position
+    const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
+    leftLeg.name = "Leg"; // Name for easy selection
+    leftLeg.position.y = -1; // Move down from pivot
+    leftLeg.castShadow = false;
+    leftLeg.receiveShadow = false;
+    leftLegPivot.add(leftLeg);
+    playerGroup.add(leftLegPivot);
+    playerGroup.leftLeg = leftLegPivot;
+
+    // Right Leg
+    const rightLegPivot = new THREE.Group();
+    rightLegPivot.position.set(0.5, -1, 0); // Hip position
+    const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
+    rightLeg.name = "Leg"; // Name for easy selection
+    rightLeg.position.y = -1; // Move down from pivot
+    rightLeg.castShadow = false;
+    rightLeg.receiveShadow = false;
+    rightLegPivot.add(rightLeg);
+    playerGroup.add(rightLegPivot);
+    playerGroup.rightLeg = rightLegPivot;
+
+    // The bottom of the legs is at y = -1 (hip) - 2 (leg length) = -3.
+    // We will offset the whole group so its bottom is at y=0.
+    playerGroup.position.y = 3;
+
+    return playerGroup;
 }
 
-const catalogManager = new CatalogManager();
+function updatePlayerColors(player, colors) {
+    if (!player || !colors) return;
+
+    player.traverse((child) => {
+        if (child.isMesh) {
+            switch (child.name) {
+                case "Head":
+                    child.material.color.set(colors.head);
+                    break;
+                case "Torso":
+                    child.material.color.set(colors.torso);
+                    break;
+                case "Leg":
+                    child.material.color.set(colors.legs);
+                    break;
+                case "Arm":
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(material => {
+                            if (material.name === "ArmTop" || material.name === "ArmSides" || material.name === "ArmBottom") {
+                                material.color.set(colors.arms);
+                            }
+                        });
+                    }
+                    break;
+            }
+        }
+    });
+}
+
+function updatePlayerFace(player, faceId) {
+    player.traverse((child) => {
+        if (child.isMesh && child.name === "Face") {
+            if (faceId === 'epic') {
+                child.material.color.set(0xff0000); // Red for epic
+            } else {
+                child.material.color.set(0xffffff); // White for default
+            }
+        }
+    });
+}
+
 
 // Community Management
 class CommunityManager {
@@ -752,6 +950,114 @@ class CommunityManager {
 
 const communityManager = new CommunityManager();
 
+
+function showCatalog() {
+    const catalogSection = document.getElementById('catalog-section');
+    const currentUser = userManager.getCurrentUser();
+
+    if (!currentUser) {
+        alert('Você precisa estar logado para acessar o catálogo.');
+        return;
+    }
+
+    updateUserCoinsDisplay();
+
+    // Hide other sections
+    hideSection(document.getElementById('featured-games'));
+    hideSection(document.querySelector('.banner'));
+    hideSection(document.getElementById('profile-section'));
+    hideSection(document.getElementById('community-section'));
+    hideSection(document.getElementById('blog-list'));
+    showOnlyAuthSection('');
+
+    showSection(catalogSection);
+    renderCatalogItems('all');
+
+    setActiveNavLink('catalog-link');
+}
+
+function hideCatalog() {
+    const catalogSection = document.getElementById('catalog-section');
+    hideSection(catalogSection);
+
+    setTimeout(() => {
+        showMainContent();
+    }, 300);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function renderCatalogItems(category) {
+    const currentUser = userManager.getCurrentUser();
+    const itemsGrid = document.getElementById('catalog-items-grid');
+    if (!itemsGrid) return;
+
+    const items = catalogManager.getItemsByType(category);
+    let userProfile = null;
+    if (currentUser) {
+        userProfile = profileManager.getProfile(currentUser);
+    }
+
+    if (items.length === 0) {
+        itemsGrid.innerHTML = '<p class="empty-message">Nenhum item disponível nesta categoria.</p>';
+        return;
+    }
+
+    itemsGrid.innerHTML = items.map(item => {
+        let buttonHtml = '';
+        const isOwned = userProfile && userProfile.inventory.includes(item.id);
+        const isEquipped = userProfile && userProfile.equippedItems[item.type] === item.id;
+
+        if (!currentUser) {
+            buttonHtml = `<button class="buy-button" disabled>Entrar para Comprar</button>`;
+        } else if (isOwned) {
+            if (isEquipped) {
+                buttonHtml = `<button class="equipped-button" data-item-id="${item.id}" data-item-type="${item.type}" disabled>Equipado</button>`;
+            } else {
+                buttonHtml = `<button class="equip-button" data-item-id="${item.id}" data-item-type="${item.type}">Equipar</button>`;
+            }
+        } else {
+            buttonHtml = `<button class="buy-button" data-item-id="${item.id}" data-item-type="${item.type}">Comprar ${item.price}</button>`;
+        }
+
+        return `
+            <div class="catalog-item-card">
+                <div class="catalog-item-thumbnail">
+                    <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}">
+                </div>
+                <h4>${escapeHtml(item.name)}</h4>
+                <div class="item-price">
+                    ${!isOwned ? `<img src="roglux_coins.png" alt="Coins" class="coins-icon">` : ''}
+                    ${!isOwned ? item.price : ''}
+                </div>
+                ${buttonHtml}
+            </div>
+        `;
+    }).join('');
+}
+
 // Helper functions for showing/hiding sections with fade animation
 function showSection(sectionElement) {
     if (!sectionElement) return;
@@ -798,8 +1104,7 @@ async function openLoginModal() {
     hideSection(document.querySelector('.banner'));
     hideSection(document.getElementById('profile-section'));
     hideSection(document.getElementById('community-section'));
-    hideSection(document.getElementById('catalog-section')); 
-    hideSection(document.getElementById('blog-list')); 
+    hideSection(document.getElementById('blog-list'));
 
     showOnlyAuthSection('login-section');
     setActiveNavLink(null); 
@@ -811,8 +1116,7 @@ async function openRegisterModal() {
     hideSection(document.querySelector('.banner'));
     hideSection(document.getElementById('profile-section'));
     hideSection(document.getElementById('community-section'));
-    hideSection(document.getElementById('catalog-section')); 
-    hideSection(document.getElementById('blog-list')); 
+    hideSection(document.getElementById('blog-list'));
 
     showOnlyAuthSection('register-section');
     setActiveNavLink(null); 
@@ -828,8 +1132,7 @@ async function openSettingsModal() {
         hideSection(document.querySelector('.banner'));
         hideSection(document.getElementById('profile-section'));
         hideSection(document.getElementById('community-section'));
-        hideSection(document.getElementById('catalog-section')); 
-        hideSection(document.getElementById('blog-list')); 
+        hideSection(document.getElementById('blog-list'));
         
         showOnlyAuthSection('settings-section');
         setActiveNavLink(null); 
@@ -852,12 +1155,10 @@ async function logoutUser() {
         // Ensure all active content sections and auth forms are hidden
         hideSection(document.getElementById('profile-section'));
         hideSection(document.getElementById('community-section'));
-        hideSection(document.getElementById('catalog-section')); 
-        hideSection(document.getElementById('blog-list')); 
-        showOnlyAuthSection(''); 
+        hideSection(document.getElementById('catalog-section'));
+        hideSection(document.getElementById('blog-list'));
+        showOnlyAuthSection('');
         
-        // Stop the avatar 3D viewer when logging out
-        stopAvatar3DViewer();
         stopCoinRewardTimer();
 
         // After a short delay for transitions to complete, show main content and then login
@@ -884,9 +1185,9 @@ function hideCurrentAuthFormAndShowMainContent() {
 function showMainContent() {
     hideSection(document.getElementById('profile-section'));
     hideSection(document.getElementById('community-section'));
-    hideSection(document.getElementById('catalog-section')); 
+    hideSection(document.getElementById('catalog-section'));
     hideSection(document.getElementById('blog-list'));
-    showOnlyAuthSection(''); 
+    showOnlyAuthSection('');
 
     showSection(document.getElementById('featured-games'));
     showSection(document.querySelector('.banner'));
@@ -924,10 +1225,10 @@ function showProfile(username) {
     // Hide other sections, show profile
     hideSection(document.getElementById('featured-games'));
     hideSection(document.querySelector('.banner'));
-    hideSection(document.getElementById('community-section')); 
-    hideSection(document.getElementById('catalog-section')); 
-    hideSection(document.getElementById('blog-list')); 
-    showOnlyAuthSection(''); 
+    hideSection(document.getElementById('community-section'));
+    hideSection(document.getElementById('catalog-section'));
+    hideSection(document.getElementById('blog-list'));
+    showOnlyAuthSection('');
     
     showSection(profileSection); 
     setActiveNavLink('profile-link'); 
@@ -958,7 +1259,7 @@ function showCommunity() {
     hideSection(document.getElementById('featured-games'));
     hideSection(document.querySelector('.banner'));
     hideSection(document.getElementById('profile-section'));
-    hideSection(document.getElementById('catalog-section')); 
+    hideSection(document.getElementById('catalog-section'));
     showOnlyAuthSection(''); // Ensure top-level auth forms are hidden
 
     // Ensure only the blog list is visible within the community section
@@ -985,202 +1286,26 @@ function hideCommunity() {
     }, 300);
 }
 
-// Function to initialize and render the Avatar 3D Viewer
-function setupAndLoadAvatar3DViewer() {
-    if (!avatar3DViewer) {
-        avatar3DViewer = new ThreeDViewer('avatar-preview-display', 'player.glb', true); 
-    } else {
-        // If already exists, just ensure base model is loaded (it should clear accessories)
-        // Clear accessories manually to avoid re-loading base player if it's already there
-        const objectsToRemove = avatar3DViewer.scene.children.filter(obj => 
-            obj.name && obj.name !== 'player.glb' && obj.name !== 'ambientLight' && obj.name !== 'directionalLight'
-        );
-        objectsToRemove.forEach(obj => avatar3DViewer.scene.remove(obj));
-        
-        // Ensure the base player model is indeed present.
-        const basePlayer = avatar3DViewer.scene.getObjectByName('player.glb');
-        if (!basePlayer) {
-            avatar3DViewer.loadModel('player.glb');
-        }
-    }
-    updateEquippedAvatarItems(); 
-}
 
-// Function to stop the Avatar 3D Viewer
-function stopAvatar3DViewer() {
-    if (avatar3DViewer) {
-        avatar3DViewer.destroy();
-        avatar3DViewer = null; 
-    }
-}
 
-// NEW: Function to update equipped items on the 3D avatar preview
-function updateEquippedAvatarItems() {
-    const avatarDisplay = document.getElementById('avatar-preview-display');
-    const currentUser = userManager.getCurrentUser();
 
-    if (!currentUser) {
-        // If no user, destroy existing viewer and show placeholder
-        if (avatar3DViewer) {
-            avatar3DViewer.destroy();
-            avatar3DViewer = null;
-        }
-        if (avatarDisplay) {
-            avatarDisplay.innerHTML = '<p class="viewer-placeholder">Faça login para ver seu personagem 3D.</p>';
-        }
-        return;
-    }
-
-    // If user is logged in, ensure viewer is initialized
-    if (!avatar3DViewer) {
-        setupAndLoadAvatar3DViewer(); // This re-initializes and loads player.glb
-    } else {
-        // Ensure base player model is present, clear only accessories
-        const basePlayer = avatar3DViewer.scene.getObjectByName('player.glb');
-        if (!basePlayer) {
-            avatar3DViewer.loadModel('player.glb'); // Reload base player if somehow missing
-        }
-        // Remove only accessories from the scene
-        const objectsToRemove = avatar3DViewer.scene.children.filter(obj => 
-            obj.name && obj.name !== 'player.glb' && obj.name !== 'ambientLight' && obj.name !== 'directionalLight'
-        );
-        objectsToRemove.forEach(obj => avatar3DViewer.scene.remove(obj));
-    }
-
-    // Remove any existing placeholder if viewer is now active
-    const existingPlaceholder = avatarDisplay.querySelector('.viewer-placeholder');
-    if (existingPlaceholder) {
-        existingPlaceholder.remove();
-    }
-
-    const profile = profileManager.getProfile(currentUser);
-
-    for (const type in profile.equippedItems) {
-        const itemId = profile.equippedItems[type];
-        const item = catalogManager.getItemById(itemId);
-
-        if (item && item.modelPath) {
-            avatar3DViewer.loadModel(item.modelPath, true, item.type);
-        }
-    }
-    avatar3DViewer.controls.update(); 
-}
-
-function showCatalog() {
-    const catalogSection = document.getElementById('catalog-section');
-    const currentUser = userManager.getCurrentUser();
-
-    if (!currentUser) {
-        alert('Você precisa estar logado para acessar o catálogo.');
-        return;
-    }
-
-    updateUserCoinsDisplay();
-    
-    // Hide other sections
-    hideSection(document.getElementById('featured-games'));
-    hideSection(document.querySelector('.banner'));
-    hideSection(document.getElementById('profile-section'));
-    hideSection(document.getElementById('community-section')); 
-    hideSection(document.getElementById('blog-list')); 
-    showOnlyAuthSection(''); 
-
-    showSection(catalogSection);
-    renderCatalogItems('all'); 
-
-    // Initialize the Avatar 3D viewer when catalog is shown
-    setupAndLoadAvatar3DViewer(); 
-
-    setActiveNavLink('catalog-link'); 
-}
-
-function hideCatalog() {
-    const catalogSection = document.getElementById('catalog-section');
-    hideSection(catalogSection);
-
-    // Stop the Avatar 3D viewer when catalog is hidden
-    stopAvatar3DViewer();
-
-    setTimeout(() => {
-        showMainContent();
-    }, 300);
-}
 
 function updateUserCoinsDisplay() {
     const currentUser = userManager.getCurrentUser();
-    const currentCatalogCoinsElement = document.getElementById('current-catalog-coins');
-    const userCoinsProfileElement = document.getElementById('user-coins'); 
+    const userCoinsProfileElement = document.getElementById('user-coins');
 
     if (currentUser) {
         const profile = profileManager.getProfile(currentUser);
-        if (currentCatalogCoinsElement) {
-            currentCatalogCoinsElement.textContent = profile.coins;
-        }
         if (userCoinsProfileElement) {
             userCoinsProfileElement.textContent = profile.coins;
         }
     } else {
-        if (currentCatalogCoinsElement) {
-            currentCatalogCoinsElement.textContent = '---';
-        }
         if (userCoinsProfileElement) {
             userCoinsProfileElement.textContent = '---';
         }
     }
 }
 
-function renderCatalogItems(category) {
-    const currentUser = userManager.getCurrentUser();
-    const itemsGrid = document.getElementById('catalog-items-grid');
-    if (!itemsGrid) return;
-
-    const items = catalogManager.getItemsByType(category);
-    let userProfile = null;
-    if (currentUser) {
-        userProfile = profileManager.getProfile(currentUser);
-    }
-
-    if (items.length === 0) {
-        itemsGrid.innerHTML = '<p class="empty-message">Nenhum item disponível nesta categoria.</p>';
-        return;
-    }
-
-    itemsGrid.innerHTML = items.map(item => {
-        let buttonHtml = '';
-        const isOwned = userProfile && userProfile.inventory.includes(item.id);
-        const isEquipped = userProfile && userProfile.equippedItems[item.type] === item.id;
-
-        if (!currentUser) {
-            buttonHtml = `<button class="buy-button" disabled>Entrar para Comprar</button>`;
-        } else if (isOwned) {
-            if (isEquipped) {
-                buttonHtml = `<button class="equipped-button" data-item-id="${item.id}" data-item-type="${item.type}" disabled>Equipado</button>`;
-            } else {
-                buttonHtml = `<button class="equip-button" data-item-id="${item.id}" data-item-type="${item.type}">Equipar</button>`;
-            }
-        } else {
-            buttonHtml = `<button class="buy-button" data-item-id="${item.id}" data-item-type="${item.type}">Comprar ${item.price}</button>`;
-        }
-
-        // Removed the view3DButton as per user request
-        const view3DButton = ''; // No more "View 3D" button
-
-        return `
-            <div class="catalog-item-card">
-                <div class="catalog-item-thumbnail">
-                    <img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}">
-                </div>
-                <h4>${escapeHtml(item.name)}</h4>
-                <div class="item-price">
-                    ${!isOwned ? `<img src="roglux_coins.png" alt="Coins" class="coins-icon">` : ''}
-                    ${!isOwned ? item.price : ''}
-                </div>
-                ${buttonHtml}
-                ${view3DButton}
-            </div>
-        `;
-    }).join('');
-}
 
 // Tab switching functionality
 function updateProfileTabs() {
@@ -1204,8 +1329,10 @@ function updateProfileTabs() {
             // Special handling for 'friends' tab
             if (targetTab === 'friends') {
                 renderFriendLists();
-            } else if (targetTab === 'favorites') { 
+            } else if (targetTab === 'favorites') {
                 renderFavoriteGamesList();
+            } else if (targetTab === 'games') {
+                renderUserGamesList();
             }
         });
     });
@@ -1217,6 +1344,8 @@ function updateProfileTabs() {
             renderFriendLists();
         } else if (targetTab === 'favorites') {
             renderFavoriteGamesList();
+        } else if (targetTab === 'games') {
+            renderUserGamesList();
         }
     }
 }
@@ -1385,7 +1514,7 @@ function syncEquippedHatFromProfile() {
         } else {
             localStorage.removeItem('rogold_equipped_hat');
         }
-        // Notify any listeners (e.g., catalog avatar preview or game on same origin)
+        // Notify any listeners (e.g., game on same origin)
         window.dispatchEvent(new Event('rogold_equipped_hat_changed'));
     } catch (e) {
         console.warn('Failed to sync equipped hat from profile:', e);
@@ -1600,7 +1729,7 @@ function renderFavoriteGamesList() {
         favoritesListContainer.innerHTML = '<p class="empty-message">Nenhum jogo favorito ainda.</p>';
     } else {
         favoritesListContainer.innerHTML = favorites.map(gameTitle => {
-            const safeGameTitle = typeof gameTitle === 'string' ? gameTitle : ''; 
+            const safeGameTitle = typeof gameTitle === 'string' ? gameTitle : '';
             // Map game titles to the correct thumbnail file paths
             let imageSrc = '';
             if (safeGameTitle === 'Natural Disaster Survival') {
@@ -1608,13 +1737,13 @@ function renderFavoriteGamesList() {
             } else if (safeGameTitle === 'Work at a Pizza Place') {
                 imageSrc = 'thumbnail2.jpg';
             } else {
-                imageSrc = 'default_game_thumbnail.png'; 
+                imageSrc = 'default_game_thumbnail.png';
             }
 
             return `
                 <div class="game-card game-card-favorite" data-game-title="${escapeHtml(safeGameTitle)}">
                     <div class="game-thumbnail">
-                        <img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(safeGameTitle)} Thumbnail">
+                        <img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(safeGameTitle)} Thumbnail" onerror="this.src='thumbnail1.jpg'">
                     </div>
                     <h4>${escapeHtml(safeGameTitle)}</h4>
                     <button class="play-button" data-game-title="${escapeHtml(safeGameTitle)}">Jogar</button>
@@ -1623,6 +1752,61 @@ function renderFavoriteGamesList() {
             `;
         }).join('');
     }
+}
+
+// NEW: Function to render user's published games in the profile tab
+function renderUserGamesList() {
+    const currentUser = userManager.getCurrentUser();
+    const userGamesContainer = document.getElementById('user-games');
+
+    if (!currentUser) {
+        userGamesContainer.innerHTML = '<p class="empty-message">Faça login para ver seus jogos.</p>';
+        return;
+    }
+
+    // Show loading message
+    userGamesContainer.innerHTML = '<p class="empty-message">Carregando jogos...</p>';
+
+    // Fetch published games from server
+    fetch('/api/games')
+        .then(response => response.json())
+        .then(data => {
+            const publishedGames = data.games || [];
+
+            // Filter games by current user (assuming games have an author field or we need to check ownership)
+            // For now, we'll show all games since we don't have user association in the database
+            // TODO: Add user association to games in database
+            const userGames = publishedGames; // Temporarily show all games
+
+            if (userGames.length === 0) {
+                userGamesContainer.innerHTML = '<p class="empty-message">Nenhum jogo criado ainda.</p>';
+            } else {
+                userGamesContainer.innerHTML = userGames.map(game => {
+                    const safeGameTitle = typeof game.title === 'string' ? game.title : 'Untitled Game';
+                    const safeGameId = typeof game.id === 'string' ? game.id : '';
+
+                    // Handle thumbnail - use file path if it starts with /thumbnails, otherwise default to thumbnail1.jpg
+                    const thumbnailSrc = game.thumbnail && game.thumbnail.startsWith('/thumbnails/')
+                        ? game.thumbnail
+                        : 'thumbnail1.jpg';
+
+                    return `
+                        <div class="game-card game-card-user" data-game-id="${escapeHtml(safeGameId)}">
+                            <div class="game-thumbnail">
+                                <img src="${thumbnailSrc}" alt="${escapeHtml(safeGameTitle)} Thumbnail" onerror="this.src='thumbnail1.jpg'">
+                            </div>
+                            <h4>${escapeHtml(safeGameTitle)}</h4>
+                            <button class="play-button" data-game-id="${escapeHtml(safeGameId)}">Jogar</button>
+                            <button class="edit-button" data-game-id="${escapeHtml(safeGameId)}">Editar</button>
+                        </div>
+                    `;
+                }).join('');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading user games:', error);
+            userGamesContainer.innerHTML = '<p class="empty-message">Erro ao carregar jogos. Tente novamente.</p>';
+        });
 }
 
 // NEW: Function to update favorite buttons on featured game cards
@@ -1634,23 +1818,26 @@ function updateFeaturedGameCards() {
         const gameTitle = card.dataset.gameTitle;
         const favoriteButton = card.querySelector('.favorite-toggle-button');
         const gameThumbnail = card.querySelector('.game-thumbnail');
-        const playButton = card.querySelector('.play-button'); 
+        const playButton = card.querySelector('.play-button');
 
         // Ensure gameTitle is a string before operations, default to empty string if not
         const safeGameTitle = typeof gameTitle === 'string' ? gameTitle : '';
 
-        // Dynamically set game thumbnail based on safeGameTitle
-        let imageSrc = '';
-        if (safeGameTitle === 'Natural Disaster Survival') {
-            imageSrc = 'thumbnail1.jpg';
-        } else if (safeGameTitle === 'Work at a Pizza Place') {
-            imageSrc = 'thumbnail2.jpg';
-        } else {
-            imageSrc = 'default_game_thumbnail.png'; 
-        }
-        
-        if (gameThumbnail) {
-            gameThumbnail.innerHTML = `<img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(safeGameTitle)} Thumbnail">`;
+        // Skip thumbnail update for published games (they have data-game-id and correct thumbnail already set)
+        if (!card.dataset.gameId) {
+            // Dynamically set game thumbnail based on safeGameTitle for hardcoded games
+            let imageSrc = '';
+            if (safeGameTitle === 'Natural Disaster Survival') {
+                imageSrc = 'thumbnail1.jpg';
+            } else if (safeGameTitle === 'Work at a Pizza Place') {
+                imageSrc = 'thumbnail2.jpg';
+            } else {
+                imageSrc = 'thumbnail1.jpg'; // Use existing thumbnail as fallback
+            }
+
+            if (gameThumbnail) {
+                gameThumbnail.innerHTML = `<img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(safeGameTitle)} Thumbnail">`;
+            }
         }
 
         // Update favorite button state
@@ -1658,7 +1845,7 @@ function updateFeaturedGameCards() {
             if (currentUser) {
                 const profile = profileManager.getProfile(currentUser);
                 // Use safeGameTitle for includes check
-                if (profile.favorites.includes(safeGameTitle)) { 
+                if (profile.favorites.includes(safeGameTitle)) {
                     favoriteButton.textContent = 'Remover Favorito';
                     favoriteButton.classList.add('remove-favorite-button');
                     favoriteButton.classList.remove('add-favorite-button');
@@ -1672,7 +1859,7 @@ function updateFeaturedGameCards() {
                 favoriteButton.textContent = 'Favoritar';
                 favoriteButton.classList.add('add-favorite-button');
                 favoriteButton.classList.remove('remove-favorite-button');
-                favoriteButton.disabled = true; 
+                favoriteButton.disabled = true;
             }
             // Ensure data-game-title is set on the button itself for delegation
             favoriteButton.setAttribute('data-game-title', safeGameTitle);
@@ -1699,16 +1886,22 @@ document.getElementById('profile-link')?.addEventListener('click', function(e) {
     }
 });
 
+
+document.getElementById('catalog-link')?.addEventListener('click', function(e) {
+    e.preventDefault();
+    showCatalog();
+});
+
 document.getElementById('community-link')?.addEventListener('click', function(e) {
     e.preventDefault();
     showCommunity();
 });
 
-// NEW: Event listener for "Catalog" link
-document.getElementById('catalog-link')?.addEventListener('click', function(e) {
+document.getElementById('studio-link')?.addEventListener('click', function(e) {
     e.preventDefault();
-    showCatalog();
+    window.location.href = 'studio.html';
 });
+
 
 // NEW: Event listener for "Home" link
 document.getElementById('home-link')?.addEventListener('click', function(e) {
@@ -1887,74 +2080,95 @@ document.getElementById('user-search-input')?.addEventListener('keypress', funct
     }
 });
 
-// NEW: Event delegation for Catalog category buttons
-document.getElementById('catalog-section')?.addEventListener('click', function(e) {
-    if (e.target.classList.contains('category-button')) {
-        const category = e.target.dataset.category;
-        document.querySelectorAll('.catalog-categories .category-button').forEach(btn => btn.classList.remove('active'));
-        e.target.classList.add('active');
-        renderCatalogItems(category);
-    }
-});
 
-// NEW: Event delegation for Catalog item actions (Buy, Equip)
-document.getElementById('catalog-items-grid')?.addEventListener('click', async function(e) {
-    const currentUser = userManager.getCurrentUser();
-    
-    const button = e.target;
-    const itemId = button.dataset.itemId;
-    const itemType = button.dataset.itemType;
-    const item = catalogManager.getItemById(itemId);
+// Function to load and display published games
+async function loadPublishedGames() {
+    const gamesGrid = document.getElementById('games-grid');
 
-    if (!item) {
-        await alert('Erro: Item não encontrado no catálogo.');
-        return;
-    }
+    if (!gamesGrid) return;
 
-    if (button.classList.contains('buy-button')) {
-        if (!currentUser) {
-            await alert('Você precisa estar logado para interagir com o catálogo.');
-            return;
+    // Clear existing published games (keep the first two hardcoded ones)
+    const existingCards = gamesGrid.querySelectorAll('.game-card');
+    existingCards.forEach(card => {
+        if (!card.dataset.gameTitle || (card.dataset.gameTitle !== 'Natural Disaster Survival' && card.dataset.gameTitle !== 'Work at a Pizza Place')) {
+            card.remove();
         }
+    });
 
-        const confirmBuy = await confirm(`Deseja comprar "${item.name}" por ${item.price} Coins?`);
-        if (confirmBuy) {
-            const subtractResult = profileManager.subtractCoins(currentUser, item.price);
-            if (subtractResult.success) {
-                const addResult = profileManager.addItemToInventory(currentUser, item.id);
-                if (addResult.success) {
-                    await alert(`Você comprou "${item.name}"!`);
-                    updateUserCoinsDisplay(); 
-                    renderCatalogItems(document.querySelector('.category-button.active').dataset.category); 
-                } else {
-                    // This case should ideally not happen if inventory check is correct
-                    await alert(addResult.message); 
-                    // Refund coins if item could not be added to inventory
-                    profileManager.addCoins(currentUser, item.price);
-                    updateUserCoinsDisplay();
+    try {
+        // Fetch published games from server API
+        const response = await fetch('/api/games');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        const publishedGames = data.games || [];
+
+        // Add published games
+        publishedGames.forEach(game => {
+            const gameCard = document.createElement('div');
+            gameCard.className = 'game-card';
+            gameCard.dataset.gameTitle = game.title || 'Untitled Game';
+            gameCard.dataset.gameId = game.id;
+
+            // Handle thumbnail - use file path if it starts with /thumbnails, otherwise default to thumbnail1.jpg
+            const thumbnailSrc = game.thumbnail && game.thumbnail.startsWith('/thumbnails/')
+                ? game.thumbnail
+                : 'thumbnail1.jpg';
+
+            gameCard.innerHTML = `
+                <div class="game-thumbnail">
+                    <img src="${thumbnailSrc}" alt="${escapeHtml(game.title || 'Untitled Game')} Thumbnail" onerror="this.src='thumbnail1.jpg'">
+                </div>
+                <h4>${escapeHtml(game.title || 'Untitled Game')}</h4>
+                <button class="play-button" data-game-id="${escapeHtml(game.id)}" onclick="playGame('${escapeHtml(game.id)}')">Jogar</button>
+                <button class="favorite-toggle-button" data-game-title="${escapeHtml(game.title || 'Untitled Game')}">Favoritar</button>
+            `;
+            gamesGrid.appendChild(gameCard);
+        });
+
+        console.log(`Loaded ${publishedGames.length} published games from server`);
+    } catch (error) {
+        console.error('Error loading published games from server:', error);
+        // Fallback to localStorage if server is unavailable
+        console.log('Falling back to localStorage for published games');
+        const publishedGames = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('rogold_published_game_')) {
+                try {
+                    const gameData = JSON.parse(localStorage.getItem(key));
+                    gameData.id = key.replace('rogold_published_game_', ''); // Extract game ID
+                    publishedGames.push(gameData);
+                } catch (e) {
+                    console.error('Error parsing published game data:', e);
                 }
-            } else {
-                await alert(subtractResult.message);
             }
         }
-    } else if (button.classList.contains('equip-button')) {
-        if (!currentUser) {
-            await alert('Você precisa estar logado para interagir com o catálogo.');
-            return;
-        }
-        const equipResult = profileManager.equipItem(currentUser, item.id, item.type);
-        if (equipResult.success) {
-            await alert(`"${item.name}" equipado com sucesso!`);
-            updateEquippedAvatarItems(); 
-            renderCatalogItems(document.querySelector('.category-button.active').dataset.category); 
-            // Simulate a socket event for equipping an item
-            console.log(`[SOCKET_EVENT] User ${currentUser} equipped item: { id: "${item.id}", name: "${item.name}", type: "${item.type}" }`);
-        } else {
-            await alert(equipResult.message);
-        }
+
+        // Add fallback published games
+        publishedGames.forEach(game => {
+            const gameCard = document.createElement('div');
+            gameCard.className = 'game-card';
+            gameCard.dataset.gameTitle = game.title || 'Untitled Game';
+            gameCard.innerHTML = `
+                <div class="game-thumbnail">
+                    <img src="${escapeHtml(game.thumbnail || 'thumbnail1.jpg')}" alt="${escapeHtml(game.title || 'Untitled Game')} Thumbnail" onerror="this.src='thumbnail1.jpg'">
+                </div>
+                <h4>${escapeHtml(game.title || 'Untitled Game')}</h4>
+                <button class="play-button" data-game-id="${escapeHtml(game.id)}">Jogar</button>
+                <button class="favorite-toggle-button" data-game-title="${escapeHtml(game.title || 'Untitled Game')}">Favoritar</button>
+            `;
+            gamesGrid.appendChild(gameCard);
+        });
     }
-    // Removed the 'view-3d-button' handling
-});
+
+    // Update favorite buttons for all games
+    updateFeaturedGameCards();
+}
+
+// Make loadPublishedGames available globally for studio.js to call
+window.loadPublishedGames = loadPublishedGames;
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', function() {
@@ -1987,20 +2201,32 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        showMainContent(); 
+        showMainContent();
         updateProfileLink();
-        updateFeaturedGameCards(); 
-        updateUserCoinsDisplay(); 
+        loadPublishedGames(); // Load published games
+        updateFeaturedGameCards();
+        updateUserCoinsDisplay();
         stopCoinRewardTimer(); // Ensure timer is stopped on index page
     } else {
         // Logic for non-index.html pages (e.g., game.html)
         const params = new URLSearchParams(window.location.search);
-        const gameTitle = params.get('game');
+        const gameId = params.get('game');
         const gameTitleDisplay = document.getElementById('game-title-display');
         const gameTitlePlaceholder = document.getElementById('game-title-placeholder');
 
         if (gameTitleDisplay) { // Check if elements exist (they won't on index.html)
-            if (gameTitle) {
+            if (gameId) {
+                // Load game data to get the title
+                const gameData = localStorage.getItem(`rogold_published_game_${gameId}`);
+                let gameTitle = 'Jogo Desconhecido';
+                if (gameData) {
+                    try {
+                        const parsedData = JSON.parse(gameData);
+                        gameTitle = parsedData.title || 'Untitled Game';
+                    } catch (e) {
+                        console.error('Error parsing game data:', e);
+                    }
+                }
                 gameTitleDisplay.textContent = gameTitle;
                 if (gameTitlePlaceholder) gameTitlePlaceholder.textContent = gameTitle;
                 document.title = `Rogold - Jogando ${gameTitle}`;
@@ -2020,24 +2246,129 @@ document.addEventListener('DOMContentLoaded', function() {
         startCoinRewardTimer(); // Start coin reward timer when on a non-index page
     }
 
+    // NEW: Event delegation for Catalog category buttons
+    document.getElementById('catalog-section')?.addEventListener('click', function(e) {
+        if (e.target.classList.contains('category-button')) {
+            const category = e.target.dataset.category;
+            document.querySelectorAll('.catalog-categories .category-button').forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+            renderCatalogItems(category);
+        }
+    });
+
+    // NEW: Event delegation for Catalog item actions (Buy, Equip)
+    document.getElementById('catalog-items-grid')?.addEventListener('click', async function(e) {
+        const currentUser = userManager.getCurrentUser();
+
+        const button = e.target;
+        const itemId = button.dataset.itemId;
+        const itemType = button.dataset.itemType;
+        const item = catalogManager.getItemById(itemId);
+
+        if (!item) {
+            await alert('Erro: Item não encontrado no catálogo.');
+            return;
+        }
+
+        if (button.classList.contains('buy-button')) {
+            if (!currentUser) {
+                await alert('Você precisa estar logado para interagir com o catálogo.');
+                return;
+            }
+
+            const confirmBuy = await confirm(`Deseja comprar "${item.name}" por ${item.price} Coins?`);
+            if (confirmBuy) {
+                const subtractResult = profileManager.subtractCoins(currentUser, item.price);
+                if (subtractResult.success) {
+                    const addResult = profileManager.addItemToInventory(currentUser, item.id);
+                    if (addResult.success) {
+                        // If it's a face item, also add to owned faces for game.js
+                        if (item.type === 'face') {
+                            let ownedFaces = JSON.parse(localStorage.getItem('rogold_owned_faces') || '["OriginalGlitchedFace.webp"]');
+                            const faceMapping = {
+                                'face_default': 'OriginalGlitchedFace.webp',
+                                'face_epic': 'epicface.png'
+                            };
+                            const faceFile = faceMapping[item.id];
+                            if (faceFile && !ownedFaces.includes(faceFile)) {
+                                ownedFaces.push(faceFile);
+                                localStorage.setItem('rogold_owned_faces', JSON.stringify(ownedFaces));
+                            }
+                        }
+                        await alert(`Você comprou "${item.name}"!`);
+                        updateUserCoinsDisplay();
+                        renderCatalogItems(document.querySelector('.category-button.active').dataset.category);
+                    } else {
+                        // This case should ideally not happen if inventory check is correct
+                        await alert(addResult.message);
+                        // Refund coins if item could not be added to inventory
+                        profileManager.addCoins(currentUser, item.price);
+                        updateUserCoinsDisplay();
+                    }
+                } else {
+                    await alert(subtractResult.message);
+                }
+            }
+        } else if (button.classList.contains('equip-button')) {
+            if (!currentUser) {
+                await alert('Você precisa estar logado para interagir com o catálogo.');
+                return;
+            }
+            const equipResult = profileManager.equipItem(currentUser, item.id, item.type);
+            if (equipResult.success) {
+                // If equipping a face, update the equipped face in localStorage for game.js
+                if (item.type === 'face') {
+                    const faceMapping = {
+                        'face_default': 'OriginalGlitchedFace.webp',
+                        'face_epic': 'epicface.png'
+                    };
+                    const faceFile = faceMapping[item.id];
+                    if (faceFile) {
+                        localStorage.setItem('rogold_face', faceFile);
+                        // Dispatch event to notify game.js of face change
+                        window.dispatchEvent(new Event('rogold_equipped_face_changed'));
+                    }
+                }
+                await alert(`"${item.name}" equipado com sucesso!`);
+                renderCatalogItems(document.querySelector('.category-button.active').dataset.category);
+                // Simulate a socket event for equipping an item
+                console.log(`[SOCKET_EVENT] User ${currentUser} equipped item: { id: "${item.id}", name: "${item.name}", type: "${item.type}" }`);
+            } else {
+                await alert(equipResult.message);
+            }
+        }
+    });
+
+
+
+
+
     // --- Event Delegation for Play and Favorite buttons ---
     document.body.addEventListener('click', async function(e) {
         // Handle Play Button clicks
         if (e.target.classList.contains('play-button')) {
-            e.preventDefault(); 
+            e.preventDefault();
             const currentUser = userManager.getCurrentUser();
             if (!currentUser) {
                 await alert('Espere um pouco aí! Primeiro logue para conseguir jogar.');
                 return;
             }
-            
-            const gameTitle = e.target.dataset.gameTitle;
-            if (gameTitle) {
-                window.location.href = `game.html?game=${encodeURIComponent(gameTitle)}`;
+
+            const gameId = e.target.dataset.gameId;
+            if (gameId) {
+                window.location.href = `game.html?game=${encodeURIComponent(gameId)}`;
             } else {
-                await alert("Não foi possível iniciar o jogo: título do jogo não encontrado.");
+                // Fallback for hardcoded games
+                const gameTitle = e.target.closest('.game-card').dataset.gameTitle;
+                if (gameTitle === 'Natural Disaster Survival') {
+                    window.location.href = `game.html?game=natural_disaster_survival`;
+                } else if (gameTitle === 'Work at a Pizza Place') {
+                    window.location.href = `game.html?game=work_at_pizza_place`;
+                } else {
+                    await alert("Não foi possível iniciar o jogo: ID do jogo não encontrado.");
+                }
             }
-        } 
+        }
         // Handle Favorite Toggle Button clicks
         else if (e.target.classList.contains('favorite-toggle-button')) {
             e.preventDefault(); 
@@ -2232,16 +2563,16 @@ window.openSettingsModal = openSettingsModal;
 window.hideProfile = hideProfile;
 window.showCommunity = showCommunity;
 window.hideCommunity = hideCommunity;
-window.showCatalog = showCatalog; 
-window.hideCatalog = hideCatalog; 
+window.showCatalog = showCatalog;
+window.hideCatalog = hideCatalog;
 window.showCreateBlogForm = showCreateBlogForm;
 window.hideCreateBlogForm = hideCreateBlogForm;
 window.hideBlogDetail = hideBlogDetail;
 window.editProfile = editProfile;
-window.closeProfileEdit = closeProfileEdit; 
+window.closeProfileEdit = closeProfileEdit;
 window.openBlog = openBlog;
-window.sendFriendRequest = sendFriendRequest; 
-window.acceptFriendRequest = acceptFriendRequest; 
+window.sendFriendRequest = sendFriendRequest;
+window.acceptFriendRequest = acceptFriendRequest;
 window.declineFriendRequest = declineFriendRequest;
 
 // Coin Reward Timer Logic
@@ -2295,31 +2626,31 @@ function stopCoinRewardTimer() {
 
 // Socket.io integration (example)
 // This is just a basic example, the actual implementation may vary based on the server setup and requirements
-const socket = io(); // Assuming io is available globally
+// const socket = io(); // Assuming io is available globally - commented out to avoid ReferenceError
 
-socket.on('connect', () => {
-    console.log('Connected to server via Socket.io');
-    
-    const currentUser = userManager.getCurrentUser();
-    if (currentUser) {
-        // Emit register event with the current user's nickname
-        socket.emit('register', { nickname: currentUser });
-    }
-});
+// socket.on('connect', () => {
+//     console.log('Connected to server via Socket.io');
+//
+//     const currentUser = userManager.getCurrentUser();
+//     if (currentUser) {
+//         // Emit register event with the current user's nickname
+//         socket.emit('register', { nickname: currentUser });
+//     }
+// });
 
 // Listen for account data from the server
-socket.on('accountData', (data) => {
-    const { nickname, equippedItems, coins } = data;
-
-    // Update local user manager and profile manager data
-    userManager.currentUser = nickname;
-    localStorage.setItem('rogold_currentUser', nickname);
-
-    profileManager.profiles[nickname] = profileManager.profiles[nickname] || {};
-    profileManager.profiles[nickname].equippedItems = equippedItems;
-    profileManager.profiles[nickname].coins = coins;
-
-    profileManager.saveProfiles();
-
-    console.log(`Account data received and applied for ${nickname}`);
-});
+// socket.on('accountData', (data) => {
+//     const { nickname, equippedItems, coins } = data;
+//
+//     // Update local user manager and profile manager data
+//     userManager.currentUser = nickname;
+//     localStorage.setItem('rogold_currentUser', nickname);
+//
+//     profileManager.profiles[nickname] = profileManager.profiles[nickname] || {};
+//     profileManager.profiles[nickname].equippedItems = equippedItems;
+//     profileManager.profiles[nickname].coins = coins;
+//
+//     profileManager.saveProfiles();
+//
+//     console.log(`Account data received and applied for ${nickname}`);
+// });

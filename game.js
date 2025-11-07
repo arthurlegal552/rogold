@@ -6,6 +6,7 @@ import * as CANNON from 'cannon-es';
 
 let scene, camera, renderer, controls;
 let player, velocity, direction;
+let playerVelocity = new THREE.Vector3();
 let moveForward = false;
 let moveBackward = false;
 let moveLeft = false;
@@ -17,6 +18,17 @@ let physicsWorld;
 const mouse = new THREE.Vector2();
 const maxDistance = 10; // distância máxima do foguete
 const cooldownTime = 1000; // 1 segundo de cooldown
+
+// Roblox 2011-style physics constants
+const ROBLOX_GRAVITY = -196.2;      // Valor usado no Roblox por volta de 2010–2014
+const ROBLOX_FRICTION = 0.03;       // Balanced friction for good traction without being too sticky
+const ROBLOX_RESTITUTION = 0.05;    // Colisões duras, pouco quique
+const ROBLOX_LINEAR_DAMPING = 0.6;  // Increased damping for better traction and reduced slipperiness
+const ROBLOX_ANGULAR_DAMPING = 0.4; // Evita rotação eterna das partes
+
+// Increased jump impulse (higher = stronger jump)
+const JUMP_IMPULSE = 300; // Changed from 120 to 200 for higher jumps
+
 let canShoot = true;
 let explosionSound;
 const explodingParticles = [];
@@ -24,8 +36,1461 @@ let nickname = localStorage.getItem('rogold_currentUser') || 'Guest' + Math.floo
 let isFlying = false;
 let speedMultiplier = 1;   // começa normal
 let isSpeeding = false;    // controle do modo admin
+let playerHealth = 100;
+const maxHealth = 100;
+let playerNameTags = {};
+
+// Face inventory system
+let ownedFaces = JSON.parse(localStorage.getItem('rogold_owned_faces') || '["OriginalGlitchedFace.webp"]');
 
 let partMaterial;
+let luaObjects = {}; // Global luaObjects for the game environment
+let spinningParts = []; // Global list of spinning parts
+let isMenuOpen = false;
+let isDancing = false;
+
+// Roblox Environment for Lua scripts
+let RobloxEnvironment = {
+    Workspace: {
+        Children: []
+    },
+    connections: [],
+    wait: (seconds) => new Promise(resolve => setTimeout(resolve, seconds * 1000))
+};
+
+// Roblox Instance class for game environment
+class RobloxInstance {
+    constructor(className, name) {
+        this.ClassName = className;
+        this.Name = name;
+        this.Parent = null;
+        this.Children = [];
+        this.threeObject = null;
+        this.cannonBody = null;
+        this.isScriptCreated = false;
+
+        // Roblox properties
+        this.Anchored = true;
+        this.CanCollide = true;
+        this.Size = new THREE.Vector3(4, 2, 2);
+        this.Position = new THREE.Vector3(0, 5, 0);
+        this.Rotation = new THREE.Euler(0, 0, 0);
+        this.Color = new THREE.Color(0.5, 0.5, 0.5);
+        this.Transparency = 0;
+        this.spinAxis = new THREE.Vector3(0, 1, 0); // Default spin axis (Y)
+    }
+
+    // Roblox-like methods
+    Destroy() {
+        // Remove from parent
+        if (this.Parent) {
+            this.Parent.Children = this.Parent.Children.filter(child => child !== this);
+        }
+
+        // Remove from scene
+        if (this.threeObject && this.threeObject.parent) {
+            this.threeObject.parent.remove(this.threeObject);
+        }
+
+        // Remove physics body
+        if (this.cannonBody && physicsWorld) {
+            physicsWorld.removeBody(this.cannonBody);
+        }
+
+        // Clean up children
+        this.Children.forEach(child => child.Destroy());
+    }
+
+    Clone() {
+        const clone = new RobloxInstance(this.ClassName, this.Name + '_Clone');
+        clone.Size = this.Size.clone();
+        clone.Position = this.Position.clone();
+        clone.Rotation = this.Rotation.clone();
+        clone.Color = this.Color.clone();
+        clone.Transparency = this.Transparency;
+        clone.Anchored = this.Anchored;
+        clone.CanCollide = this.CanCollide;
+        
+        // Set up physics for the clone
+        if (this.cannonBody && physicsWorld) {
+            const shape = new CANNON.Box(new CANNON.Vec3(
+                clone.Size.x / 2,
+                clone.Size.y / 2,
+                clone.Size.z / 2
+            ));
+            
+            clone.cannonBody = new CANNON.Body({
+                mass: clone.Anchored ? 0 : 1,
+                material: partMaterial,
+                shape: shape,
+                position: new CANNON.Vec3(
+                    clone.Position.x,
+                    clone.Position.y,
+                    clone.Position.z
+                ),
+                linearDamping: ROBLOX_LINEAR_DAMPING,
+                fixedRotation: false
+            });
+            
+            // Apply Roblox-style collision response
+            clone.cannonBody.addEventListener('collide', (e) => {
+                if (e.contact.getImpactVelocityAlongNormal() > 5) {
+                    // Classic Roblox collision response
+                    const bounceForce = e.contact.getImpactVelocityAlongNormal() * 0.5;
+                    const normal = e.contact.ni;
+                    clone.cannonBody.applyImpulse(
+                        new CANNON.Vec3(
+                            normal.x * bounceForce,
+                            normal.y * bounceForce,
+                            normal.z * bounceForce
+                        ),
+                        new CANNON.Vec3(0, 0, 0)
+                    );
+                }
+            });
+        }
+        
+        return clone;
+    }
+
+    // Get descendants
+    GetDescendants() {
+        const descendants = [];
+        this.Children.forEach(child => {
+            descendants.push(child);
+            descendants.push(...child.GetDescendants());
+        });
+        return descendants;
+    }
+
+    // Find first child by name
+    FindFirstChild(name) {
+        return this.Children.find(child => child.Name === name);
+    }
+
+    // Wait for child (simplified)
+    WaitForChild(name) {
+        return this.FindFirstChild(name);
+    }
+
+    // Spin method for parts
+    Spin(axis) {
+        this.isSpinning = true;
+        if (axis) {
+            this.spinAxis = axis instanceof THREE.Vector3 ? axis : new THREE.Vector3(axis.X, axis.Y, axis.Z);
+        }
+        spinningParts.push(this); // Add to global spinning list
+    }
+
+    // Roblox-like Spin method (alias for compatibility)
+    spin() {
+        this.Spin();
+    }
+}
+
+// ===== LUA SCRIPT INTERPRETER =====
+
+function interpretLuaScript(script) {
+    const actions = [];
+    const lines = script.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('--'));
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        // Handle wait statements
+        if (line.startsWith('wait')) {
+            const match = line.match(/wait\((.*?)\)/);
+            const seconds = match ? parseFloat(match[1]) || 0.03 : 0.03;
+            actions.push({
+                type: 'wait',
+                seconds: seconds
+            });
+            continue;
+        }
+
+        // Handle for loops
+        if (line.startsWith('for ')) {
+            const match = line.match(/for\s+(\w+)\s*=\s*(\d+),\s*(\d+)\s+do/);
+            if (match) {
+                const loopVar = match[1];
+                const start = parseInt(match[2]);
+                const end = parseInt(match[3]);
+                const loopBody = extractLoopBody(lines, i);
+                actions.push({
+                    type: 'for_loop',
+                    loopVar: loopVar,
+                    start: start,
+                    end: end,
+                    body: loopBody
+                });
+                // Skip the loop body lines
+                i += countLoopLines(lines, i);
+                continue;
+            }
+        }
+
+        // Handle while loops
+        if (line.startsWith('while ')) {
+            const match = line.match(/while\s+(.+)\s+do/);
+            if (match) {
+                const condition = match[1];
+                const loopBody = extractLoopBody(lines, i);
+                actions.push({
+                    type: 'while_loop',
+                    condition: condition,
+                    body: loopBody
+                });
+                // Skip the loop body lines
+                i += countLoopLines(lines, i);
+                continue;
+            }
+        }
+
+        // Handle event connections (object.Event:Connect(function))
+        if (line.includes(':Connect(')) {
+            const match = line.match(/(\w+)\.(\w+):Connect\(\s*function\s*\(\s*([^)]*)\s*\)/);
+            if (match) {
+                const varName = match[1];
+                const eventName = match[2];
+                const params = match[3];
+                actions.push({
+                    type: 'connect_event',
+                    varName: varName,
+                    eventName: eventName,
+                    params: params,
+                    functionLines: extractFunctionBody(lines, i)
+                });
+                // Skip the function body lines
+                i += countFunctionLines(lines, i);
+                continue;
+            }
+        }
+
+        // Handle Instance.new
+        if (line.includes('Instance.new')) {
+            const match = line.match(/local\s+(\w+)\s*=\s*Instance\.new\(['"]([^'"]+)['"]\)/);
+            if (match) {
+                const varName = match[1];
+                const className = match[2];
+                actions.push({
+                    type: 'create_instance',
+                    varName: varName,
+                    className: className
+                });
+                continue;
+            }
+        }
+
+        // Handle property assignments
+        if (line.includes('=')) {
+            const match = line.match(/(\w+)\.(\w+)\s*=\s*(.+)/);
+            if (match) {
+                const varName = match[1];
+                const property = match[2];
+                const value = match[3];
+                actions.push({
+                    type: 'set_property',
+                    varName: varName,
+                    property: property,
+                    value: value
+                });
+                continue;
+            }
+        }
+
+        // Handle method calls
+        if (line.includes(':')) {
+            const match = line.match(/(\w+):(\w+)\(([^)]*)\)/);
+            if (match) {
+                const varName = match[1];
+                const method = match[2];
+                const args = match[3];
+                actions.push({
+                    type: 'call_method',
+                    varName: varName,
+                    method: method,
+                    args: args
+                });
+                continue;
+            }
+        }
+
+        // Handle function definitions
+        if (line.includes('function ')) {
+            const match = line.match(/function\s+(\w+)\s*\(/);
+            if (match) {
+                const funcName = match[1];
+                actions.push({
+                    type: 'define_function',
+                    funcName: funcName,
+                    functionLines: extractFunctionBody(lines, i)
+                });
+                // Skip the function body lines
+                i += countFunctionLines(lines, i);
+                continue;
+            }
+        }
+
+        // Handle print statements
+        if (line.startsWith('print(')) {
+            // Match both single and double quotes
+            const match = line.match(/print\(['"]([^'"]+)['"]\)/);
+            if (match) {
+                actions.push({
+                    type: 'print',
+                    message: match[1]
+                });
+                continue;
+            }
+        }
+
+        // Handle variable assignments
+        if (line.includes('=') && !line.includes('local')) {
+            const match = line.match(/(\w+)\s*=\s*(.+)/);
+            if (match) {
+                const varName = match[1];
+                const value = match[2];
+                actions.push({
+                    type: 'set_variable',
+                    varName: varName,
+                    value: value
+                });
+                continue;
+            }
+        }
+    }
+
+    return actions;
+}
+
+function extractFunctionBody(lines, startIndex) {
+    const body = [];
+    let braceCount = 0;
+    let inFunction = false;
+
+    for (let i = startIndex; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (line.includes('function') || line.includes('do')) {
+            inFunction = true;
+            braceCount++;
+            continue; // Skip the function declaration line
+        }
+
+        if (inFunction) {
+            body.push(line);
+        }
+
+        if (line.includes('end')) {
+            braceCount--;
+            if (braceCount === 0) {
+                break;
+            }
+        }
+    }
+
+    return body;
+}
+
+function extractLoopBody(lines, startIndex) {
+    const body = [];
+    let braceCount = 0;
+    let inLoop = false;
+
+    for (let i = startIndex; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (line.includes('do')) {
+            inLoop = true;
+            braceCount++;
+        }
+
+        if (inLoop) {
+            body.push(line);
+        }
+
+        if (line.includes('end')) {
+            braceCount--;
+            if (braceCount === 0) {
+                break;
+            }
+        }
+    }
+
+    return body;
+}
+
+function countFunctionLines(lines, startIndex) {
+    let count = 0;
+    let braceCount = 0;
+
+    for (let i = startIndex; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (line.includes('function') || line.includes('do')) {
+            braceCount++;
+            count++; // Include the declaration line in count
+            continue;
+        }
+
+        count++;
+
+        if (line.includes('end')) {
+            braceCount--;
+            if (braceCount === 0) {
+                break;
+            }
+        }
+    }
+
+    return count;
+}
+
+function countLoopLines(lines, startIndex) {
+    let count = 0;
+    let braceCount = 0;
+
+    for (let i = startIndex; i < lines.length; i++) {
+        const line = lines[i];
+        count++;
+
+        if (line.includes('do')) {
+            braceCount++;
+        }
+
+        if (line.includes('end')) {
+            braceCount--;
+            if (braceCount === 0) {
+                break;
+            }
+        }
+    }
+
+    return count;
+}
+
+// Replace the runScriptWithErrorHandling function with this async version:
+async function runScriptWithErrorHandling(scriptName = null, testScript = null) {
+    let script;
+
+    if (testScript) {
+        script = testScript;
+    } else if (scriptName) {
+        const scriptObj = luaObjects[scriptName];
+        if (scriptObj && scriptObj.ClassName === 'Script') {
+            script = scriptObj.Source || '';
+        } else {
+            addOutput(`Error: Script "${scriptName}" not found!`, 'error');
+            return;
+        }
+    } else {
+        // For main script editor
+        if (window.monacoEditor) {
+            script = window.monacoEditor.getValue().trim();
+        } else {
+            addOutput('Error: No script to run!', 'error');
+            return;
+        }
+    }
+
+    if (!script) {
+        addOutput('Error: Script is empty!', 'error');
+        return;
+    }
+
+    // clearOutput(); // Commented out as it's not defined
+    // clearErrorHighlighting(scriptName); // Commented out as it's not defined
+
+    try {
+        const actions = interpretLuaScript(script);
+
+        // Check for syntax errors before execution
+        // const syntaxErrors = checkLuaSyntax(script); // Commented out as it's not defined
+        // if (syntaxErrors.length > 0) {
+        //     syntaxErrors.forEach(error => {
+        //         console.error(`Syntax Error (Line ${error.line}): ${error.message}`);
+        //     });
+        //     // addErrorHighlighting(scriptName, syntaxErrors); // Commented out as it's not defined
+        //     return;
+        // }
+
+        await executeLuaActions(actions);
+
+        // Start game loop for continuous execution
+        // startGameLoop(); // Commented out as it's not defined
+    } catch (error) {
+        console.error('RoGold Studio: Script execution error:', error);
+
+        // Try to extract line number from error
+        const lineMatch = error.message.match(/line (\d+)/i);
+        if (lineMatch) {
+            const lineNum = parseInt(lineMatch[1]);
+            console.error(`Error at line ${lineNum}: ${error.message}`);
+        }
+    }
+}
+
+async function executeLuaActions(actions, initialVariables = {}) {
+    const variables = { ...initialVariables };
+    const functions = {};
+
+    for (const action of actions) {
+        try {
+            switch (action.type) {
+                case 'wait':
+                    // Convert to milliseconds and wait
+                    const waitTime = action.seconds * 1000;
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    break;
+
+                case 'for_loop':
+                    for (let i = action.start; i <= action.end; i++) {
+                        // Set loop variable
+                        variables[action.loopVar] = i;
+                        // Execute loop body
+                        const loopActions = interpretLuaScript(action.body.join('\n'));
+                        executeLuaActions(loopActions);
+                    }
+                    break;
+
+                case 'while_loop':
+                    let iterations = 0;
+                    const maxIterations = 1000; // Prevent infinite loops
+                    while (iterations < maxIterations) {
+                        // Evaluate condition (simple variable check for now)
+                        const conditionValue = variables[action.condition] || parseValue(action.condition);
+                        if (!conditionValue) break;
+
+                        // Execute loop body
+                        const loopActions = interpretLuaScript(action.body.join('\n'));
+                        executeLuaActions(loopActions);
+                        iterations++;
+                    }
+                    if (iterations >= maxIterations) {
+                        console.warn('While loop exceeded maximum iterations, breaking to prevent infinite loop');
+                    }
+                    break;
+
+                case 'create_instance':
+                    const instance = new RobloxInstance(action.className, action.varName);
+                    instance.isScriptCreated = true;
+                    variables[action.varName] = instance;
+
+                    // Create 3D representation for parts
+                    if (action.className === 'Part') {
+                        const geometry = new THREE.BoxGeometry(4, 4, 4);
+                        const material = new THREE.MeshLambertMaterial({ color: 0xff6600 });
+                        const part = new THREE.Mesh(geometry, material);
+                        part.position.set(0, 5, 0); // Default position
+                        part.castShadow = true;
+                        part.receiveShadow = true;
+                        scene.add(part);
+                        instance.threeObject = part;
+                        instance.CanCollide = true;
+                        instance.Size = new THREE.Vector3(4, 4, 4);
+                        instance.Position = part.position.clone();
+
+                        // Add physics body
+                        if (physicsWorld) {
+                            const shape = new CANNON.Box(new CANNON.Vec3(2, 2, 2));
+                            const body = new CANNON.Body({
+                                mass: instance.Anchored ? 0 : 1,
+                                type: instance.Anchored ? CANNON.Body.STATIC : CANNON.Body.DYNAMIC,
+                                position: new CANNON.Vec3(0, 5, 0),
+                                shape: shape,
+                                material: partMaterial
+                            });
+                            body.userData = { mesh: part, instance: instance };
+
+                            // Add collision event listener
+                            body.addEventListener('collide', (e) => {
+                                const otherBody = e.body;
+                                const contact = e.contact;
+
+                                // Trigger Touched event if the instance has a Touched connection
+                                if (instance.touched && typeof instance.touched === 'function') {
+                                    instance.touched(otherBody.userData?.instance || otherBody);
+                                }
+
+                                // Apply Roblox-style collision response
+                                if (contact.getImpactVelocityAlongNormal() > 5) {
+                                    const bounceForce = contact.getImpactVelocityAlongNormal() * 0.5;
+                                    const normal = contact.ni;
+                                    body.applyImpulse(
+                                        new CANNON.Vec3(
+                                            normal.x * bounceForce,
+                                            normal.y * bounceForce,
+                                            normal.z * bounceForce
+                                        ),
+                                        new CANNON.Vec3(0, 0, 0)
+                                    );
+                                }
+                            });
+
+                            physicsWorld.addBody(body);
+                            instance.cannonBody = body;
+                        }
+
+                        // Set parent to workspace
+                        instance.Parent = RobloxEnvironment.Workspace;
+                        RobloxEnvironment.Workspace.Children.push(instance);
+                        // addToWorkspaceTree(action.varName, 'part'); // Commented out as it's not defined
+                    } else if (action.className === 'Frame' ||
+                                action.className === 'TextLabel' ||
+                                action.className === 'TextButton' ||
+                                action.className === 'ScreenGui') {
+                        try {
+                            const Constructor = window[action.className];
+                            if (!Constructor) {
+                                throw new Error(`GUI class ${action.className} not found on window`);
+                            }
+                            const gui = new Constructor(action.varName);
+                            variables[action.varName] = gui;
+
+                            // Ensure GUI is visible by default
+                            if (gui.Visible !== false) {
+                                gui.Visible = true;
+                            }
+                            // Force update style after creation
+                            gui.updateStyle();
+                            if (action.parent === 'game.PlayerGui' || action.parent === 'game.Players.LocalPlayer.PlayerGui') {
+                                RobloxEnvironment.PlayerGui.AddGui(gui);
+                            }
+                        } catch (error) {
+                            console.error('Error creating GUI instance:', error.message);
+                            throw error;
+                        }
+                    }
+                    break;
+
+                case 'set_property':
+                    const targetObj = variables[action.varName] || luaObjects[action.varName];
+                    if (targetObj) {
+                        const value = parseValue(action.value);
+
+                        switch (action.property) {
+                            case 'Position':
+                                if (targetObj instanceof GuiObject) {
+                                    if (value instanceof RobloxUDim2) {
+                                        const threeVec = value.toVector2();
+                                        targetObj.Position = threeVec;
+                                        targetObj.updateStyle();
+                                    } else if (value instanceof THREE.Vector2 || value instanceof RobloxVector2) {
+                                        const threeVec = value instanceof RobloxVector2 ? value.toThreeVector2() : value;
+                                        targetObj.Position = threeVec;
+                                        targetObj.updateStyle();
+                                    }
+                                } else if (value instanceof THREE.Vector3 || value instanceof RobloxVector3) {
+                                    const threeVec = value instanceof RobloxVector3 ? value.toThreeVector3() : value;
+                                    targetObj.Position = threeVec;
+                                    if (targetObj.threeObject) {
+                                        targetObj.threeObject.position.copy(threeVec);
+                                    }
+                                    // Update physics body if it exists
+                                    if (targetObj.cannonBody) {
+                                        targetObj.cannonBody.position.copy(threeVec);
+                                    }
+                                }
+                                break;
+                            case 'Size':
+                                if (targetObj instanceof GuiObject) {
+                                    if (value instanceof RobloxUDim2) {
+                                        const threeVec = value.toVector2();
+                                        targetObj.Size = threeVec;
+                                        targetObj.updateStyle();
+                                    } else if (value instanceof THREE.Vector2 || value instanceof RobloxVector2) {
+                                        const threeVec = value instanceof RobloxVector2 ? value.toThreeVector2() : value;
+                                        targetObj.Size = threeVec;
+                                        targetObj.updateStyle();
+                                    }
+                                } else if (value instanceof THREE.Vector3 || value instanceof RobloxVector3) {
+                                    const threeVec = value instanceof RobloxVector3 ? value.toThreeVector3() : value;
+                                    targetObj.Size = threeVec;
+                                    if (targetObj.threeObject) {
+                                        targetObj.threeObject.scale.copy(threeVec).multiplyScalar(0.5);
+                                    }
+                                }
+                                break;
+                            case 'Rotation':
+                                if (value instanceof THREE.Euler || value instanceof RobloxVector3) {
+                                    const threeEuler = value instanceof RobloxVector3 ? new THREE.Euler(value.X, value.Y, value.Z) : value;
+                                    targetObj.Rotation = threeEuler;
+                                    if (targetObj.threeObject) {
+                                        targetObj.threeObject.rotation.copy(threeEuler);
+                                    }
+                                    // Update physics body if it exists
+                                    if (targetObj.cannonBody) {
+                                        targetObj.cannonBody.quaternion.setFromEuler(threeEuler.x, threeEuler.y, threeEuler.z);
+                                    }
+                                }
+                                break;
+                            case 'Color':
+                                if (value instanceof THREE.Color) {
+                                    targetObj.Color = value;
+                                    if (targetObj.threeObject && targetObj.threeObject.material) {
+                                        targetObj.threeObject.material.color = value;
+                                    }
+                                }
+                                break;
+                            case 'BackgroundColor3':
+                                if (targetObj instanceof GuiObject && value instanceof THREE.Color) {
+                                    targetObj.BackgroundColor = value;
+                                    targetObj.updateStyle();
+                                }
+                                break;
+                            case 'Transparency':
+                                targetObj.Transparency = parseFloat(value) || 0;
+                                if (targetObj.threeObject && targetObj.threeObject.material) {
+                                    targetObj.threeObject.material.transparent = true;
+                                    targetObj.threeObject.material.opacity = 1 - targetObj.Transparency;
+                                }
+                                break;
+                            case 'Anchored':
+                                targetObj.Anchored = value === 'true' || value === true;
+                                if (targetObj.cannonBody) {
+                                    targetObj.cannonBody.mass = targetObj.Anchored ? 0 : 1;
+                                    targetObj.cannonBody.type = targetObj.Anchored ? CANNON.Body.STATIC : CANNON.Body.DYNAMIC;
+                                    targetObj.cannonBody.updateMassProperties();
+                                }
+                                break;
+                            case 'CanCollide':
+                                targetObj.CanCollide = value === 'true' || value === true;
+                                updateCollisionVisualFeedback(targetObj);
+                                break;
+                            case 'Parent':
+                                if (value === 'workspace') {
+                                    targetObj.Parent = RobloxEnvironment.Workspace;
+                                    RobloxEnvironment.Workspace.Children.push(targetObj);
+                                    // addToWorkspaceTree(targetObj.Name, targetObj.ClassName.toLowerCase()); // Commented out as it's not defined
+                                } else if (value === 'game.PlayerGui' || value === 'game.Players.LocalPlayer.PlayerGui') {
+                                    if (targetObj instanceof GuiObject) {
+                                        RobloxEnvironment.PlayerGui.AddGui(targetObj);
+                                    }
+                                } else {
+                                    // Handle parenting to another GUI object
+                                    const parentObj = variables[value] || luaObjects[value];
+                                    if (parentObj && parentObj instanceof GuiObject && targetObj instanceof GuiObject) {
+                                        try {
+                                            parentObj.element.appendChild(targetObj.element);
+                                            targetObj.Parent = parentObj;
+                                            parentObj.Children.push(targetObj);
+                                        } catch (error) {
+                                            console.error(`Error parenting ${targetObj.Name} to ${parentObj.Name}:`, error.message);
+                                        }
+                                    }
+                                }
+                                break;
+                            case 'Name':
+                                targetObj.Name = value;
+                                break;
+                            case 'Text':
+                                if (targetObj instanceof TextLabel || targetObj instanceof TextButton) {
+                                    targetObj.Text = value;
+                                    targetObj.updateTextStyle();
+                                }
+                                break;
+                            case 'TextColor3':
+                                if (targetObj instanceof TextLabel || targetObj instanceof TextButton) {
+                                    if (value instanceof THREE.Color) {
+                                        targetObj.TextColor = value;
+                                        targetObj.updateTextStyle();
+                                    }
+                                }
+                                break;
+                            case 'TextSize':
+                                if (targetObj instanceof TextLabel || targetObj instanceof TextButton) {
+                                    targetObj.TextSize = parseInt(value) || 14;
+                                    targetObj.updateTextStyle();
+                                }
+                                break;
+                        }
+                        console.log(`Set ${action.varName}.${action.property} = ${action.value}`);
+                    }
+                    break;
+
+                case 'connect_event':
+                    const eventObj = variables[action.varName] || luaObjects[action.varName];
+                    if (eventObj) {
+                        // Create event connection
+                        const connection = {
+                            object: eventObj,
+                            eventName: action.eventName,
+                            callback: function(...args) {
+                                // Execute the function body with access to the current variables scope
+                                executeFunctionBody(action.functionLines, action.params, args, variables);
+                            }
+                        };
+
+                        // Store connection for cleanup
+                        if (!eventObj.connections) eventObj.connections = [];
+                        eventObj.connections.push(connection);
+
+                        // Set up actual event listeners based on event type
+                        if (action.eventName === 'Touched') {
+                            // For parts, we'll simulate touch events
+                            eventObj.touched = false;
+                        } else if (action.eventName === 'MouseButton1Click') {
+                            // For GUI objects, use the Connect method if available (TextButton), otherwise direct listener
+                            if (eventObj instanceof GuiObject && eventObj.element) {
+                                if (eventObj.MouseButton1Click && eventObj.MouseButton1Click.Connect) {
+                                    // Use the object's Connect method (for TextButton)
+                                    eventObj.MouseButton1Click.Connect(() => {
+                                        // Execute the function body with access to the current variables scope
+                                        executeFunctionBody(action.functionLines, action.params, [], variables);
+                                    });
+                                } else {
+                                    // Fallback to direct event listener for other GUI objects
+                                    eventObj.element.addEventListener('click', () => {
+                                        // Execute the function body with access to the current variables scope
+                                        executeFunctionBody(action.functionLines, action.params, [], variables);
+                                    });
+                                }
+                            }
+                        }
+
+                        RobloxEnvironment.connections = RobloxEnvironment.connections || [];
+                        RobloxEnvironment.connections.push(connection);
+                    }
+                    break;
+
+                case 'define_function':
+                    functions[action.funcName] = action.functionLines;
+                    break;
+
+                case 'call_method':
+                    const methodObj = variables[action.varName] || luaObjects[action.varName];
+                    if (methodObj) {
+                        switch (action.method) {
+                            case 'Spin':
+                            case 'spin':
+                                if (methodObj.Spin) {
+                                    let axis = null;
+                                    if (action.args && action.args.trim()) {
+                                        const args = action.args.split(',').map(arg => arg.trim());
+                                        if (args.length > 0 && args[0]) {
+                                            axis = parseValue(args[0]);
+                                        }
+                                    }
+                                    methodObj.Spin(axis);
+                                }
+                                break;
+                            case 'Play':
+                                if (methodObj.ClassName === 'Sound' && methodObj.audio) {
+                                    methodObj.audio.play();
+                                }
+                                break;
+                            case 'Destroy':
+                                if (methodObj.Destroy) {
+                                    methodObj.Destroy();
+                                    delete variables[action.varName];
+                                    delete luaObjects[action.varName];
+                                }
+                                break;
+                            case 'wait':
+                                // Handle wait() function
+                                const waitTime = parseFloat(action.args) || 0.03; // Default to 0.03 seconds
+                                await RobloxEnvironment.wait(waitTime);
+                                addOutput(`Waited for ${waitTime} seconds`, 'success');
+                                break;
+                        }
+                    } else if (functions[action.varName]) {
+                        // Call user-defined function
+                        executeFunctionBody(functions[action.varName], '', []);
+                    } else {
+                        // Check if it's a script object in the workspace
+                        const scriptObj = luaObjects[action.varName];
+                        if (scriptObj && scriptObj.ClassName === 'Script' && scriptObj.Source) {
+                            // Execute the script's source code
+                            try {
+                                const scriptActions = interpretLuaScript(scriptObj.Source);
+                                executeLuaActions(scriptActions);
+                                console.log(`Executed script: ${action.varName}`);
+                            } catch (error) {
+                                console.error(`Error executing script ${action.varName}: ${error.message}`);
+                            }
+                        } else {
+                            console.error(`Error: Object '${action.varName}' not found for method call`);
+                        }
+                    }
+                    break;
+
+                case 'set_variable':
+                    variables[action.varName] = parseValue(action.value);
+                    break;
+
+                case 'animate_part':
+                    const animObj = variables[action.varName] || luaObjects[action.varName];
+                    if (animObj && animObj.threeObject) {
+                        // Simple animation: move in a circle
+                        const time = performance.now() * 0.001;
+                        const radius = 5;
+                        const x = Math.cos(time) * radius;
+                        const z = Math.sin(time) * radius;
+                        const newPos = new THREE.Vector3(x, animObj.Position.y, z);
+                        animObj.Position = newPos;
+                        animObj.threeObject.position.copy(newPos);
+                        if (animObj.cannonBody) {
+                            animObj.cannonBody.position.copy(newPos);
+                        }
+                    }
+                    break;
+
+                case 'spin_part':
+                    const spinObj = variables[action.varName] || luaObjects[action.varName];
+                    if (spinObj && spinObj.threeObject) {
+                        // Spin the part around Y axis
+                        const time = performance.now() * 0.001;
+                        const rotationSpeed = 2; // radians per second
+                        spinObj.threeObject.rotation.y = time * rotationSpeed;
+                        spinObj.Rotation.y = time * rotationSpeed;
+                        if (spinObj.cannonBody) {
+                            spinObj.cannonBody.quaternion.setFromEuler(0, time * rotationSpeed, 0);
+                        }
+                    }
+                    break;
+
+                case 'print':
+                    console.log('LUA PRINT:', action.message);
+                    // Also show in chat or UI if possible
+                    if (typeof appendChatBoxMessage === 'function') {
+                        appendChatBoxMessage('SYSTEM', '[SCRIPT] ' + action.message);
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error('Error executing action:', error);
+            throw error;
+        }
+    }
+}
+
+function executeFunctionBody(functionLines, paramString, args, variables = {}) {
+    // Simple function execution - for now just execute the lines
+    const functionActions = interpretLuaScript(functionLines.join('\n'));
+    executeLuaActions(functionActions, variables);
+}
+
+function parseValue(valueStr) {
+    // Parse Vector2.new(x, y)
+    const vector2Match = valueStr.match(/Vector2\.new\(([^,]+),\s*([^)]+)\)/);
+    if (vector2Match) {
+        return new RobloxVector2(
+            parseFloat(vector2Match[1]),
+            parseFloat(vector2Match[2])
+        );
+    }
+
+    // Parse Vector3.new(x, y, z)
+    const vectorMatch = valueStr.match(/Vector3\.new\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+    if (vectorMatch) {
+        return new RobloxVector3(
+            parseFloat(vectorMatch[1]),
+            parseFloat(vectorMatch[2]),
+            parseFloat(vectorMatch[3])
+        );
+    }
+
+    // Parse UDim2.new(scaleX, offsetX, scaleY, offsetY)
+    const udim2Match = valueStr.match(/UDim2\.new\(([^,]+),\s*([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+    if (udim2Match) {
+        return new RobloxUDim2(
+            parseFloat(udim2Match[1]),
+            parseFloat(udim2Match[2]),
+            parseFloat(udim2Match[3]),
+            parseFloat(udim2Match[4])
+        );
+    }
+
+    // Parse CFrame.new(x, y, z) - simplified, just return position vector for now
+    const cframeMatch = valueStr.match(/CFrame\.new\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+    if (cframeMatch) {
+        return new RobloxVector3(
+            parseFloat(cframeMatch[1]),
+            parseFloat(cframeMatch[2]),
+            parseFloat(cframeMatch[3])
+        );
+    }
+
+    // Parse Color3.new(r, g, b)
+    const colorMatch = valueStr.match(/Color3\.new\(([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+    if (colorMatch) {
+        return new THREE.Color(
+            parseFloat(colorMatch[1]),
+            parseFloat(colorMatch[2]),
+            parseFloat(colorMatch[3])
+        );
+    }
+
+    // Parse strings
+    if (valueStr.startsWith("'") && valueStr.endsWith("'")) {
+        return valueStr.slice(1, -1);
+    }
+
+    // Parse numbers
+    if (!isNaN(valueStr)) {
+        return parseFloat(valueStr);
+    }
+
+    // Return as string for other cases
+    return valueStr;
+}
+
+// Roblox Vector3 class for Lua scripts
+class RobloxVector3 {
+    constructor(x = 0, y = 0, z = 0) {
+        this.X = x;
+        this.Y = y;
+        this.Z = z;
+    }
+
+    static new(x, y, z) {
+        return new RobloxVector3(x, y, z);
+    }
+
+    // Convert to THREE.Vector3 for internal use
+    toThreeVector3() {
+        return new THREE.Vector3(this.X, this.Y, this.Z);
+    }
+
+    // Basic operations
+    add(other) {
+        return new RobloxVector3(this.X + other.X, this.Y + other.Y, this.Z + other.Z);
+    }
+
+    multiply(scalar) {
+        return new RobloxVector3(this.X * scalar, this.Y * scalar, this.Z * scalar);
+    }
+
+    // For debugging
+    toString() {
+        return `Vector3(${this.X}, ${this.Y}, ${this.Z})`;
+    }
+}
+
+// Roblox Vector2 class for Lua scripts
+class RobloxVector2 {
+    constructor(x = 0, y = 0) {
+        this.X = x;
+        this.Y = y;
+    }
+
+    static new(x, y) {
+        return new RobloxVector2(x, y);
+    }
+
+    // Convert to THREE.Vector2 for internal use
+    toThreeVector2() {
+        return new THREE.Vector2(this.X, this.Y);
+    }
+
+    // Basic operations
+    add(other) {
+        return new RobloxVector2(this.X + other.X, this.Y + other.Y);
+    }
+
+    multiply(scalar) {
+        return new RobloxVector2(this.X * scalar, this.Y * scalar);
+    }
+
+    // For debugging
+    toString() {
+        return `Vector2(${this.X}, ${this.Y})`;
+    }
+}
+
+// Roblox UDim2 class for Lua scripts
+class RobloxUDim2 {
+    constructor(scaleX = 0, offsetX = 0, scaleY = 0, offsetY = 0) {
+        this.ScaleX = scaleX;
+        this.OffsetX = offsetX;
+        this.ScaleY = scaleY;
+        this.OffsetY = offsetY;
+    }
+
+    static new(scaleX, offsetX, scaleY, offsetY) {
+        return new RobloxUDim2(scaleX, offsetX, scaleY, offsetY);
+    }
+
+    // Convert to THREE.Vector2 in pixels (assuming full screen for PlayerGui)
+    toVector2() {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        return new THREE.Vector2(
+            this.ScaleX * width + this.OffsetX,
+            this.ScaleY * height + this.OffsetY
+        );
+    }
+
+    // For debugging
+    toString() {
+        return `UDim2(${this.ScaleX}, ${this.OffsetX}, ${this.ScaleY}, ${this.OffsetY})`;
+    }
+}
+
+// Make Vector3, Vector2, and UDim2 available globally for Lua scripts
+window.Vector3 = RobloxVector3;
+window.Vector2 = RobloxVector2;
+window.UDim2 = RobloxUDim2;
+
+// ===== GUI CLASSES =====
+
+class GuiObject extends RobloxInstance {
+    constructor(className, name) {
+        super(className, name);
+        this.Position = new THREE.Vector2(0, 0);
+        this.Size = new THREE.Vector2(200, 200);
+        this.BackgroundColor = new THREE.Color(0.5, 0.5, 0.5);
+        this.BackgroundTransparency = 0;
+        this.BorderColor = new THREE.Color(0.1, 0.1, 0.1);
+        this.BorderSizePixel = 1;
+        this.Visible = true;
+        this.ZIndex = 1;
+
+        // Create DOM element
+        this.element = document.createElement('div');
+        this.element.className = 'rogold-gui ' + className.toLowerCase();
+        this.element.style.position = 'absolute';
+        this.updateStyle();
+
+        // Add to document if parent is PlayerGui
+        if (this.Parent === RobloxEnvironment.PlayerGui) {
+            RobloxEnvironment.PlayerGui.AddGui(this);
+        }
+    }
+
+    updateStyle() {
+        try {
+            this.element.style.position = 'absolute';
+            this.element.style.left = this.Position.x + 'px';
+            this.element.style.top = this.Position.y + 'px';
+            this.element.style.width = this.Size.x + 'px';
+            this.element.style.height = this.Size.y + 'px';
+            this.element.style.backgroundColor = `#${this.BackgroundColor.getHexString()}`;
+            this.element.style.opacity = 1 - this.BackgroundTransparency;
+            this.element.style.border = `${this.BorderSizePixel}px solid #${this.BorderColor.getHexString()}`;
+            this.element.style.display = this.Visible ? 'block' : 'none';
+            this.element.style.zIndex = this.ZIndex || 1;
+            this.element.style.boxSizing = 'border-box';
+        } catch (error) {
+            console.error(`Error updating style for ${this.ClassName} ${this.Name}:`, error.message);
+        }
+    }
+
+    Destroy() {
+        if (this.element && this.element.parentNode) {
+            this.element.parentNode.removeChild(this.element);
+        }
+        super.Destroy();
+    }
+}
+
+class Frame extends GuiObject {
+    constructor(name) {
+        super('Frame', name);
+        this.element.style.backgroundColor = '#ffffff';
+        this.element.style.border = '1px solid #000000';
+    }
+}
+
+class TextLabel extends GuiObject {
+    constructor(name) {
+        super('TextLabel', name);
+        this.Text = '';
+        this.TextColor = new THREE.Color(0, 0, 0);
+        this.TextSize = 14;
+        this.Font = 'Arial';
+        this.TextWrapped = true;
+        this.TextXAlignment = 'Left';
+        this.TextYAlignment = 'Top';
+
+        this.element.style.color = '#000000';
+        this.element.style.fontSize = this.TextSize + 'px';
+        this.element.style.fontFamily = this.Font;
+        this.element.style.padding = '5px';
+        this.updateTextStyle();
+    }
+
+    updateTextStyle() {
+        try {
+            this.element.textContent = this.Text;
+            this.element.style.color = `#${this.TextColor.getHexString()}`;
+            this.element.style.fontSize = this.TextSize + 'px';
+            this.element.style.fontFamily = this.Font;
+            this.element.style.whiteSpace = this.TextWrapped ? 'normal' : 'nowrap';
+            this.element.style.textAlign = this.TextXAlignment.toLowerCase();
+            this.element.style.verticalAlign = this.TextYAlignment.toLowerCase();
+        } catch (error) {
+            console.error(`Error updating text style for ${this.ClassName} ${this.Name}:`, error.message);
+        }
+    }
+}
+
+class TextButton extends GuiObject {
+    constructor(name) {
+        super('TextButton', name);
+        this.Text = '';
+        this.TextColor = new THREE.Color(0, 0, 0);
+        this.TextSize = 14;
+        this.Font = 'Arial';
+        this.AutoButtonColor = true;
+
+        this.element.style.cursor = 'pointer';
+        this.element.style.textAlign = 'center';
+        this.element.style.lineHeight = '2';
+        this.element.style.userSelect = 'none';
+        this.updateTextStyle();
+
+        if (this.AutoButtonColor) {
+            this.setupHoverEffects();
+        }
+
+        // Event system compatible with Lua :Connect
+        this.MouseButton1Click = {
+            Connect: (callback) => {
+                try {
+                    this.element.addEventListener('click', callback);
+                    return { Disconnect: () => this.element.removeEventListener('click', callback) };
+                } catch (error) {
+                    console.error('Error connecting MouseButton1Click event:', error);
+                    addOutput(`Error connecting MouseButton1Click for ${this.Name}: ${error.message}`, 'error');
+                    return { Disconnect: () => {} };
+                }
+            }
+        };
+    }
+
+    updateTextStyle() {
+        try {
+            this.element.textContent = this.Text;
+            this.element.style.color = `#${this.TextColor.getHexString()}`;
+            this.element.style.fontSize = this.TextSize + 'px';
+            this.element.style.fontFamily = this.Font;
+        } catch (error) {
+            console.error(`Error updating text style for ${this.ClassName} ${this.Name}:`, error.message);
+        }
+    }
+
+    setupHoverEffects() {
+        try {
+            this.element.addEventListener('mouseenter', () => {
+                const color = this.BackgroundColor.clone().multiplyScalar(0.9);
+                this.element.style.backgroundColor = `#${color.getHexString()}`;
+            });
+            this.element.addEventListener('mouseleave', () => {
+                this.element.style.backgroundColor = `#${this.BackgroundColor.getHexString()}`;
+            });
+        } catch (error) {
+            console.error(`Error setting up hover effects for ${this.ClassName} ${this.Name}:`, error.message);
+        }
+    }
+}
+
+class ScreenGui extends GuiObject {
+    constructor(name) {
+        super('ScreenGui', name);
+        this.element.style.position = 'absolute';
+        this.element.style.top = '0';
+        this.element.style.left = '0';
+        this.element.style.width = '100%';
+        this.element.style.height = '100%';
+        this.element.style.pointerEvents = 'none';
+        this.element.style.zIndex = '1000';
+        this.BackgroundTransparency = 1; // ScreenGui should be invisible
+        this.updateStyle();
+
+        // In test mode, ScreenGui acts as a container that routes to game GUI container
+        if (isTestMode) {
+            RobloxEnvironment.PlayerGui.AddGui(this);
+        }
+    }
+
+    updateStyle() {
+        // ScreenGui is always full screen and invisible
+        this.element.style.position = 'absolute';
+        this.element.style.top = '0';
+        this.element.style.left = '0';
+        this.element.style.width = '100%';
+        this.element.style.height = '100%';
+        this.element.style.pointerEvents = 'none';
+        this.element.style.zIndex = '1000';
+        this.element.style.backgroundColor = 'transparent';
+    }
+}
+
+// Unified GUI container creation - ensure only one exists
+if (!document.getElementById('gui-container')) {
+    const container = document.createElement('div');
+    container.id = 'gui-container';
+    container.style.cssText = `
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: auto;
+        z-index: 100;
+        background-color: rgba(0, 0, 0, 0.1);
+        border: 2px dashed #666;
+        box-sizing: border-box;
+    `;
+    container.style.display = 'none';
+    document.body.appendChild(container);
+}
+
+// Create ScreenGui container for test mode
+if (!document.getElementById('screen-gui-container')) {
+    const screenContainer = document.createElement('div');
+    screenContainer.id = 'screen-gui-container';
+    screenContainer.style.cssText = `
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 1000;
+        background-color: transparent;
+        box-sizing: border-box;
+    `;
+    screenContainer.style.display = 'none';
+    document.body.appendChild(screenContainer);
+}
+
+// Add GUI container to RobloxEnvironment
+RobloxEnvironment.PlayerGui = {
+    Children: [],
+    AddGui: function(gui) {
+        try {
+            if (gui instanceof GuiObject) {
+                let container;
+                if (gui.ClassName === 'ScreenGui') {
+                    // ScreenGui uses its own container in test mode
+                    container = document.getElementById('screen-gui-container');
+                } else {
+                    container = document.getElementById('gui-container');
+                }
+
+                if (container && gui.element) {
+                    if (!container.contains(gui.element)) {
+                        container.appendChild(gui.element);
+                    }
+                    if (!this.Children.includes(gui)) {
+                        this.Children.push(gui);
+                        if (this.Children.length === 1) {
+                            container.style.display = 'block';
+                        }
+                    }
+
+                    // Force update style after adding to DOM
+                    gui.updateStyle();
+                }
+            }
+        } catch (error) {
+            console.error('Error adding GUI to PlayerGui:', error.message);
+        }
+    },
+    RemoveGui: function(gui) {
+        try {
+            const index = this.Children.indexOf(gui);
+            if (index > -1) {
+                this.Children.splice(index, 1);
+                if (gui.element && gui.element.parentNode) {
+                    gui.element.parentNode.removeChild(gui.element);
+                }
+                if (this.Children.length === 0) {
+                    const container = document.getElementById('gui-container');
+                    if (container) {
+                        container.style.display = 'none';
+                    }
+                    const screenContainer = document.getElementById('screen-gui-container');
+                    if (screenContainer) {
+                        screenContainer.style.display = 'none';
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error removing GUI from PlayerGui:', error.message);
+        }
+    }
+};
+
+const guiStyle = document.createElement('style');
+guiStyle.textContent = `
+.rogold-gui {
+    position: absolute;
+    box-sizing: border-box;
+    font-family: Arial, sans-serif;
+}
+
+.rogold-gui.frame {
+    background-color: #ffffff;
+    border: 1px solid #000000;
+}
+
+.rogold-gui.textlabel {
+    padding: 5px;
+}
+
+.rogold-gui.textbutton {
+    background-color: #e0e0e0;
+    border: 1px solid #000000;
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+
+.rogold-gui.textbutton:hover {
+    background-color: #cccccc;
+}
+`;
+document.head.appendChild(guiStyle);
+
+// Expose GUI classes globally
+window.GuiObject = GuiObject;
+
+// Remove duplicate container creation - handled above
+
+// Ensure global PlayerGui references the unified RobloxEnvironment.PlayerGui
+window.PlayerGui = RobloxEnvironment.PlayerGui;
+
+// Make Instance.new available globally for Lua scripts
+window.Instance = {
+    new: function(className) {
+        switch (className) {
+            case 'Frame':
+                return new Frame('Frame');
+            case 'TextLabel':
+                return new TextLabel('TextLabel');
+            case 'TextButton':
+                return new TextButton('TextButton');
+            case 'ScreenGui':
+                return new ScreenGui('ScreenGui');
+            case 'Part':
+                return new RobloxInstance('Part', 'Part');
+            default:
+                return new RobloxInstance(className, className);
+        }
+    }
+};
+
+// Ensure ScreenGui is properly recognized as GuiObject for parenting
+// ScreenGui inherits from GuiObject, so it should work, but let's make sure
+
+// Make game object available globally for Lua scripts
+window.game = {
+    PlayerGui: RobloxEnvironment.PlayerGui,
+    Workspace: RobloxEnvironment.Workspace
+};
+
+// Make GUI classes available globally for Lua scripts (immediately)
+window.Frame = Frame;
+window.TextLabel = TextLabel;
+window.TextButton = TextButton;
+window.ScreenGui = ScreenGui;
+
+// Ensure GUI container is above the game canvas
+if (RobloxEnvironment.PlayerGui.element) {
+    RobloxEnvironment.PlayerGui.element.style.zIndex = '1000';
+}
 
 let rotateCameraLeft = false;
 let rotateCameraRight = false;
@@ -42,12 +1507,37 @@ const playerSpeed = 20.0;
 
 let cameraOffset;
 let cameraTarget = new THREE.Vector3();
+let baseCameraOffset;
 
-let audioListener, walkSound, jumpSound, clickSound, spawnSound, deathSound, ouchSound, launchSound,currentDeathSound;
+let audioListener, walkSound, jumpSound, clickSound, spawnSound, deathSound, ouchSound, launchSound, currentDeathSound, danceMusic;
 let isMobile = false; // This will be updated dynamically
 let controlOverride = localStorage.getItem('controlOverride'); // 'pc', 'mobile', or null
 
 let renderTarget, postScene, postCamera;
+let pixelatedEffectEnabled = localStorage.getItem('rogold_pixelated') !== 'false'; // Default to enabled, but check localStorage
+let audioMuted = localStorage.getItem('rogold_muted') === 'true'; // Default to not muted
+let isTestMode = false; // Will be set in loadStudioTestObjects
+
+function applyMuteSetting() {
+    const defaultVolumes = {
+        walkSound: 0.5,
+        jumpSound: 0.5,
+        clickSound: 0.5,
+        spawnSound: 0.5,
+        deathSound: 0.5,
+        ouchSound: 0.5,
+        launchSound: 0.5,
+        explosionSound: 0.8,
+        danceMusic: 0.7
+    };
+
+    [walkSound, jumpSound, clickSound, spawnSound, deathSound, ouchSound, launchSound, explosionSound, danceMusic].forEach((sound, index) => {
+        if (sound) {
+            const soundName = Object.keys(defaultVolumes)[index];
+            sound.setVolume(audioMuted ? 0 : defaultVolumes[soundName]);
+        }
+    });
+}
 
 let socket = null;
 let otherPlayers = {};
@@ -56,12 +1546,10 @@ let playerId;
 let pendingPlayers = new Set();
 let headTemplate = null;
 const pendingHats = {};
+const pendingFaces = {};
 
 let lastSentTime = 0;
 const sendInterval = 100; // ms, so 10 times per second
-
-let lastNicknameUpdateTime = 0;
-const nicknameUpdateInterval = 100; // ms
 
 function playClickSound() {
     if (clickSound && clickSound.buffer) {
@@ -115,43 +1603,33 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const hideBtn = document.getElementById('hide-player-list-btn');
     const playerList = document.getElementById('player-list');
-    const playerListHeader = document.querySelector('.player-list-header');
-
-    // Style the header to have button on the side
-    playerListHeader.style.display = 'flex';
-    playerListHeader.style.justifyContent = 'space-between';
-    playerListHeader.style.alignItems = 'center';
-    hideBtn.style.fontSize = '16px';
-    hideBtn.style.border = '1px solid #ccc';
-    hideBtn.style.background = '#f0f0f0';
-    hideBtn.style.cursor = 'pointer';
-    hideBtn.style.padding = '2px 8px';
+    const playerListContainer = document.getElementById('player-list-container');
 
     let isPlayerListHidden = false;
 
     hideBtn.addEventListener('click', () => {
         isPlayerListHidden = !isPlayerListHidden;
         playerList.style.display = isPlayerListHidden ? 'none' : '';
-        hideBtn.textContent = isPlayerListHidden ? '▲' : '▼';
+        hideBtn.textContent = isPlayerListHidden ? 'Show' : 'Hide';
     });
-    // Initial
-    hideBtn.textContent = '▼';
 });
 
 // Chat listener is now bound after socket connects inside initSocket()
 
 // Append message to chat box
-function appendChatBoxMessage(chatPlayerId, message) {
+function appendChatBoxMessage(nickname, message) {
     const chatBox = document.getElementById('chat-box');
     if (!chatBox) return;
     const msgDiv = document.createElement('div');
     msgDiv.className = 'chat-message';
-    msgDiv.textContent = `${chatPlayerId}: ${message}`;
+    // Use data attribute for player so CSS can render a retro prefix
+    msgDiv.setAttribute('data-player', nickname);
+    msgDiv.textContent = `${nickname}: ${message}`;
     chatBox.appendChild(msgDiv);
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 // Show bubble chat above player
-function showBubbleChat(chatPlayerId, message) {
+function showBubbleChat(chatPlayerId, nickname, message) {
     let targetPlayer = chatPlayerId === playerId ? player : otherPlayers[chatPlayerId];
     if (!targetPlayer) return;
 
@@ -170,30 +1648,15 @@ function showBubbleChat(chatPlayerId, message) {
     bubble.className = 'bubble-chat';
     bubble.textContent = message;
     bubble.style.position = 'absolute';
-    bubble.style.background = 'white';
-    bubble.style.border = '1px solid black';
-    bubble.style.borderRadius = '8px';
-    bubble.style.padding = '4px 8px';
-    bubble.style.fontSize = '14px';
-    bubble.style.color = 'black';
+    bubble.style.background = 'rgba(255,255,255,0.85)';
+    bubble.style.borderRadius = '16px';
+    bubble.style.padding = '6px 14px';
+    bubble.style.fontSize = '16px';
     bubble.style.pointerEvents = 'none';
     bubble.style.whiteSpace = 'pre-line';
-    bubble.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+    bubble.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
     bubble.style.transition = 'opacity 0.3s';
     bubble.style.zIndex = 200;
-    // Add tail
-    const tail = document.createElement('div');
-    tail.style.position = 'absolute';
-    tail.style.bottom = '-6px';
-    tail.style.left = '50%';
-    tail.style.transform = 'translateX(-50%)';
-    tail.style.width = '0';
-    tail.style.height = '0';
-    tail.style.borderLeft = '4px solid transparent';
-    tail.style.borderRight = '4px solid transparent';
-    tail.style.borderTop = '6px solid white';
-    tail.style.zIndex = 199;
-    bubble.appendChild(tail);
 
     document.body.appendChild(bubble);
 
@@ -225,75 +1688,6 @@ function showBubbleChat(chatPlayerId, message) {
     }, 3000);
 }
 
-function createNicknameLabel(player, nickname) {
-    // Nickname
-    const label = document.createElement('div');
-    label.className = 'nickname-label';
-    label.textContent = nickname;
-    label.style.position = 'absolute';
-    label.style.color = 'white';
-    label.style.fontSize = '14px';
-    label.style.fontWeight = 'bold';
-    label.style.textShadow = '1px 1px 0px black';
-    label.style.pointerEvents = 'none';
-    label.style.zIndex = 100;
-    document.body.appendChild(label);
-    player.userData.nicknameLabel = label;
-
-    // Health bar
-    const healthBar = document.createElement('div');
-    healthBar.className = 'health-bar';
-    healthBar.style.position = 'absolute';
-    healthBar.style.width = '50px';
-    healthBar.style.height = '6px';
-    healthBar.style.background = 'green';
-    healthBar.style.border = '1px solid white';
-    healthBar.style.pointerEvents = 'none';
-    healthBar.style.zIndex = 100;
-    healthBar.style.imageRendering = 'pixelated';
-    const healthFill = document.createElement('div');
-    healthFill.style.width = '100%';
-    healthFill.style.height = '100%';
-    healthFill.style.background = 'red';
-    healthFill.style.imageRendering = 'pixelated';
-    healthBar.appendChild(healthFill);
-    document.body.appendChild(healthBar);
-    player.userData.healthBar = healthBar;
-    player.userData.healthFill = healthFill;
-    player.userData.health = 100; // Initial
-}
-
-function updateNicknamePositions() {
-    Object.values(otherPlayers).forEach(p => {
-        if (!p.userData.nicknameLabel) return;
-        let headMesh = null;
-        p.traverse(child => {
-            if (child.isMesh && child.name === "Head") {
-                headMesh = child;
-            }
-        });
-        const target = headMesh || p;
-        let worldPos = new THREE.Vector3();
-        target.getWorldPosition(worldPos);
-        worldPos.y += 2.0; // Above head
-        let screenPos = worldPos.clone().project(camera);
-        let x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
-        let y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
-        p.userData.nicknameLabel.style.left = `${x - p.userData.nicknameLabel.offsetWidth / 2}px`;
-        p.userData.nicknameLabel.style.top = `${y - p.userData.nicknameLabel.offsetHeight - 5}px`;
-        // Health bar below
-        const barY = y - p.userData.nicknameLabel.offsetHeight - 5 + 20;
-        p.userData.healthBar.style.left = `${x - 25}px`;
-        p.userData.healthBar.style.top = `${barY}px`;
-        p.userData.healthFill.style.width = p.userData.health + '%';
-        // Color from green to red
-        const health = p.userData.health;
-        const r = Math.floor((100 - health) * 2.55);
-        const g = Math.floor(health * 2.55);
-        p.userData.healthFill.style.background = `rgb(${r}, ${g}, 0)`;
-    });
-}
-
 function createPlayer(headModel) {
 
     const playerGroup = new THREE.Group();
@@ -305,7 +1699,7 @@ function createPlayer(headModel) {
 
     // Arm Materials - with stud texture on top and bottom
     const textureLoader = new THREE.TextureLoader();
-    
+
     const topStudsTexture = textureLoader.load('roblox-stud.png');
     topStudsTexture.wrapS = THREE.RepeatWrapping;
     topStudsTexture.wrapT = THREE.RepeatWrapping;
@@ -318,7 +1712,7 @@ function createPlayer(headModel) {
 
     const armTopMaterial = new THREE.MeshLambertMaterial({ color: 0xFAD417, map: topStudsTexture });
     armTopMaterial.name = "ArmTop"; // For color changing
-    
+
     const armBottomMaterial = new THREE.MeshLambertMaterial({ color: 0xFAD417, map: bottomStudsTexture });
     armBottomMaterial.name = "ArmBottom"; // For color changing
 
@@ -349,30 +1743,7 @@ function createPlayer(headModel) {
     head.castShadow = false;
     head.receiveShadow = false;
     playerGroup.add(head);
-
-    // Face Overlay
-    const faceTextureLoader = new THREE.TextureLoader();
-    let faceId = localStorage.getItem('rogold_equipped_face') || 'default';
-    let faceTexturePath = 'OriginalGlitchedFace.webp';
-    if (faceId === 'face_epic') {
-        faceTexturePath = 'epicface.jpg';
-    }
-    const faceTexture = faceTextureLoader.load(faceTexturePath);
-    faceTexture.minFilter = THREE.NearestFilter;
-    faceTexture.magFilter = THREE.NearestFilter;
-    const faceMaterial = new THREE.MeshLambertMaterial({
-        map: faceTexture,
-        transparent: true,
-        alphaTest: 0.1 // To avoid rendering fully transparent parts
-    });
-    const faceGeometry = new THREE.PlaneGeometry(1.05, 1.05);
-    const facePlane = new THREE.Mesh(faceGeometry, faceMaterial);
-    facePlane.name = "Face"; // For easy selection
-
-    // Position it relative to the head. The head is a cylinder model,
-    // so we place the face on its surface on the Z axis.
-    facePlane.position.set(0, 0, 0.75); // radius of the head model
-    head.add(facePlane);
+    playerGroup.userData.head = head;
 
     // -- Roblox 2006 Badge --
     const badgeTextureLoader = new THREE.TextureLoader();
@@ -443,8 +1814,8 @@ function createPlayer(headModel) {
     playerGroup.rightLeg = rightLegPivot;
 
     // The bottom of the legs is at y = -1 (hip) - 2 (leg length) = -3.
-    // We will offset the whole group so its bottom is at y=0.
-    playerGroup.position.y = 3;
+    // For physics, keep at y=0 and offset physics body instead.
+    playerGroup.position.y = 0;
 
     return playerGroup;
 }
@@ -478,31 +1849,22 @@ function updatePlayerColors(player, colors) {
     });
 }
 
-function updatePlayerFace(player, faceId) {
-    player.traverse((child) => {
-        if (child.isMesh && child.name === "Face") {
-            if (faceId === 'epic') {
-                child.material.color.set(0xff0000); // Red for epic
-            } else {
-                child.material.color.set(0xffffff); // White for default
-            }
-        }
-    });
-}
-
 function createRemotePlayer(headModel, playerData) {
     const playerGroup = createPlayer(headModel);
-    playerGroup.position.set(playerData.x, playerData.y, playerData.z);
+    playerGroup.position.set(playerData.x, playerData.y + 1.0, playerData.z); // Offset visual upward to align feet with physics body bottom
     playerGroup.rotation.y = playerData.rotation;
     playerGroup.userData.targetPosition = new THREE.Vector3(playerData.x, playerData.y, playerData.z);
     playerGroup.userData.targetQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, playerData.rotation, 0));
     updatePlayerColors(playerGroup, playerData.colors);
-    updatePlayerFace(playerGroup, playerData.faceId || 'default');
     // Hat application is handled in ensureRemotePlayer() to avoid duplicate loads
 
     // Salve o nickname para uso na lista
     playerGroup.userData.nickname = playerData.nickname || "Guest";
-    playerGroup.userData.faceId = playerData.faceId || 'default';
+
+    // Load face for remote player
+    const faceId = playerData.faceId || 'OriginalGlitchedFace.webp';
+    addFaceToPlayer(playerGroup, faceId);
+
     return playerGroup;
 }
 
@@ -527,8 +1889,6 @@ function ensureRemotePlayer(playerData) {
         remotePlayer.userData.playerId = playerData.id;
         otherPlayers[playerData.id] = remotePlayer;
         scene.add(remotePlayer);
-        createNicknameLabel(remotePlayer, playerData.nickname);
-        remotePlayer.userData.health = playerData.health || 100;
 
         // Apply any pending hat update, falling back to initial hat from snapshot
         const hatId = pendingHats[playerData.id] ?? playerData.hatId;
@@ -536,6 +1896,11 @@ function ensureRemotePlayer(playerData) {
             addHatToPlayer(remotePlayer, hatId);
             delete pendingHats[playerData.id];
         }
+
+        // Apply any pending face update, falling back to initial face from snapshot
+        const faceId = pendingFaces[playerData.id] ?? playerData.faceId ?? 'OriginalGlitchedFace.webp';
+        addFaceToPlayer(remotePlayer, faceId);
+        delete pendingFaces[playerData.id];
 
         pendingPlayers.delete(playerData.id);
         updatePlayerList();
@@ -576,7 +1941,8 @@ function initSocket() {
     
     socket.on('connect', () => {
         playerId = socket.id;
-        socket.emit('register', { nickname, faceId: localStorage.getItem('rogold_equipped_face') || 'default' }); // <--- ENVIA O NICKNAME E FACE
+        const faceId = localStorage.getItem('rogold_face') || 'OriginalGlitchedFace.webp';
+        socket.emit('register', { nickname, faceId }); // <--- ENVIA O NICKNAME E FACE
 
         console.log('Connected to server');
         statusEl.textContent = `Online (${Object.keys(otherPlayers).length + 1} players)`;
@@ -637,11 +2003,12 @@ function initSocket() {
     // Bind client listeners that must exist on the active socket instance
     socket.on('chat', ({ playerId: chatPlayerId, nickname, message }) => {
         appendChatBoxMessage(nickname, message);
-        showBubbleChat(chatPlayerId, message);
+        showBubbleChat(chatPlayerId, nickname, message);
     });
 
     // Server-authoritative rocket spawns
     socket.on('spawnRocket', (data) => {
+        if (data.owner === playerId) return; // Already spawned locally
         spawnRocket(
             new THREE.Vector3(data.position.x, data.position.y, data.position.z),
             new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z),
@@ -677,9 +2044,6 @@ function initSocket() {
         // Remove players who have disconnected
         Object.keys(otherPlayers).forEach(id => {
             if (!serverPlayers[id]) {
-                if (otherPlayers[id].userData.nicknameLabel) {
-                    otherPlayers[id].userData.nicknameLabel.remove();
-                }
                 scene.remove(otherPlayers[id]);
                 delete otherPlayers[id];
             }
@@ -692,11 +2056,13 @@ function initSocket() {
             }
 
             if (!otherPlayers[playerData.id]) {
-                 ensureRemotePlayer(playerData);
+                  ensureRemotePlayer(playerData);
             } else {
-                 // This is an existing player, update their state for interpolation
+                  // This is an existing player, update their state for interpolation
                 const remotePlayer = otherPlayers[playerData.id];
                 remotePlayer.userData.targetPosition.set(playerData.x, playerData.y, playerData.z);
+                // Update visual position with offset
+                remotePlayer.position.lerp(new THREE.Vector3(playerData.x, playerData.y + 1.0, playerData.z), 0.2);
                 
                 const targetQuaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, playerData.rotation, 0));
                 remotePlayer.userData.targetQuaternion = targetQuaternion;
@@ -739,16 +2105,7 @@ function initSocket() {
                     remotePlayer.rightLeg.rotation.x = THREE.MathUtils.lerp(remotePlayer.rightLeg.rotation.x, 0, 0.2);
 
                 }
-
-                // Update health
-                remotePlayer.userData.health = playerData.health;
-
-                // Update face if changed
-                if (remotePlayer.userData.faceId !== playerData.faceId) {
-                    remotePlayer.userData.faceId = playerData.faceId;
-                    updatePlayerFace(remotePlayer, playerData.faceId);
-                }
-
+                
                 // Update colors if they have changed
                 updatePlayerColors(remotePlayer, playerData.colors);
             }
@@ -765,12 +2122,14 @@ function initSocket() {
     
     socket.on('playerLeft', (playerId) => {
         if (otherPlayers[playerId]) {
-            if (otherPlayers[playerId].userData.nicknameLabel) {
-                otherPlayers[playerId].userData.nicknameLabel.remove();
-            }
             scene.remove(otherPlayers[playerId]);
             delete otherPlayers[playerId];
             // Update player count is now handled by gameState
+        }
+        // Remove name tag
+        if (playerNameTags[playerId]) {
+            playerNameTags[playerId].remove();
+            delete playerNameTags[playerId];
         }
     });
 
@@ -853,52 +2212,37 @@ socket.on('initialHats', (playerHats) => {
     });
 });
 
+// Recebe atualização de face de outro jogador
+socket.on('playerFaceChanged', ({ playerId: changedId, faceId }) => {
+    const remotePlayer = otherPlayers[changedId];
+    if (remotePlayer) {
+        addFaceToPlayer(remotePlayer, faceId);
+    } else {
+        // Cache face update to apply when the remote player is created
+        if (!pendingFaces) pendingFaces = {};
+        pendingFaces[changedId] = faceId;
+    }
+});
+
+// Quando receber todas as faces ao entrar
+socket.on('initialFaces', (playerFaces) => {
+    Object.entries(playerFaces).forEach(([id, faceId]) => {
+        if (otherPlayers[id]) {
+            addFaceToPlayer(otherPlayers[id], faceId);
+        }
+    });
+});
+
 // On explosion event
 socket.on('explosion', (data) => {
     spawnExplosion(new THREE.Vector3(data.position.x, data.position.y, data.position.z));
-});
-
-// Face change
-socket.on('playerFaceChanged', ({ playerId, faceId }) => {
-    if (playerId === playerId) {
-        // Local
-        player.userData.faceId = faceId;
-        updatePlayerFace(player, faceId);
-    } else {
-        const remote = otherPlayers[playerId];
-        if (remote) {
-            remote.userData.faceId = faceId;
-            updatePlayerFace(remote, faceId);
-        }
-    }
-});
-
-// Health update
-socket.on('healthUpdate', ({ playerId, health }) => {
-    if (playerId === playerId) {
-        // Local
-        document.getElementById('health-text').textContent = health;
-        document.getElementById('health-fill').style.width = health + '%';
-        player.userData.health = health;
-    } else {
-        const remote = otherPlayers[playerId];
-        if (remote) {
-            remote.userData.health = health;
-        }
-    }
 });
 
 // Player death: show respawn effect to killer and others by hiding victim temporarily.
 // Explosion visuals are already handled by the 'explosion' event above.
 socket.on('playerDied', ({ killer, victim }) => {
     // Local victim handles its own full respawn flow
-    if (victim === playerId) {
-        // Reset health to 100
-        document.getElementById('health-text').textContent = '100';
-        document.getElementById('health-fill').style.width = '100%';
-        player.userData.health = 100;
-        return;
-    }
+    if (victim === playerId) return;
 
     const remote = otherPlayers[victim];
     if (!remote) return;
@@ -910,8 +2254,6 @@ socket.on('playerDied', ({ killer, victim }) => {
         // we only restore visibility here for the observers.
         if (otherPlayers[victim]) {
             otherPlayers[victim].visible = true;
-            // Reset health
-            otherPlayers[victim].userData.health = 100;
         }
     }, 3000);
 });
@@ -1006,41 +2348,67 @@ function initGame() {
     directionalLight.shadow.mapSize.height = 2048;
     scene.add(directionalLight);
 
-    // Physics world setup
+    // Physics world setup with Roblox 2011-style physics
     physicsWorld = new CANNON.World({
-        gravity: new CANNON.Vec3(0, -9.82 * 20, 0), // Stronger gravity
+        gravity: new CANNON.Vec3(0, ROBLOX_GRAVITY, 0),
+        allowSleep: false // Classic Roblox physics didn't allow parts to sleep
     });
+
+    physicsWorld.solver.iterations = 50; // Extreme collision stability
+    physicsWorld.defaultContactMaterial.friction = ROBLOX_FRICTION;
+    physicsWorld.defaultContactMaterial.restitution = ROBLOX_RESTITUTION;
+
+    // Add damping to prevent excessive sliding
+    physicsWorld.defaultContactMaterial.contactEquationStiffness = 1e8;
+    physicsWorld.defaultContactMaterial.contactEquationRelaxation = 3;
 
     const groundMaterial = new CANNON.Material("groundMaterial");
     partMaterial = new CANNON.Material("partMaterial");
 
+    // Classic Roblox-style contact materials
     const groundPartContactMaterial = new CANNON.ContactMaterial(
         groundMaterial,
         partMaterial,
         {
-            friction: 0.4, // How much it slides
-            restitution: 0.1 //  How much it bounces
+            friction: ROBLOX_FRICTION,
+            restitution: ROBLOX_RESTITUTION,
+            contactEquationStiffness: 1e8, // Much stiffer contacts to prevent falling through
+            contactEquationRelaxation: 3 // Faster contact solving
         }
     );
     physicsWorld.addContactMaterial(groundPartContactMaterial);
 
+    // Add contact material for part-part collisions
+    const partPartContactMaterial = new CANNON.ContactMaterial(
+        partMaterial,
+        partMaterial,
+        {
+            friction: ROBLOX_FRICTION,
+            restitution: ROBLOX_RESTITUTION,
+            contactEquationStiffness: 1e6,
+            contactEquationRelaxation: 3
+        }
+    );
+    physicsWorld.addContactMaterial(partPartContactMaterial);
+
     const groundBody = new CANNON.Body({
         type: CANNON.Body.STATIC,
         shape: new CANNON.Plane(),
-        material: groundMaterial
+        material: groundMaterial,
+        collisionFilterGroup: 1, // Ground in group 1
+        collisionFilterMask: -1 // Collide with all groups
     });
-    groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); // horizontal
+    groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); // horizontal with normal pointing up
+    groundBody.position.set(0, 0, 0); // Match baseplate visual position
+    groundBody.userData = { isGround: true };
     physicsWorld.addBody(groundBody);
 
     // Post-processing setup for pixelated effect
-    const renderTargetSize = new THREE.Vector2();
-    renderer.getDrawingBufferSize(renderTargetSize);
-    const lowResWidth = 750;
-    const lowResHeight = Math.round(lowResWidth / (renderTargetSize.x / renderTargetSize.y));
-
-    renderTarget = new THREE.WebGLRenderTarget(lowResWidth, lowResHeight);
+    renderTarget = new THREE.WebGLRenderTarget(320, 240);
     renderTarget.texture.minFilter = THREE.NearestFilter;
     renderTarget.texture.magFilter = THREE.NearestFilter;
+
+    updatePixelatedEffect();
 
     postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     postScene = new THREE.Scene();
@@ -1111,6 +2479,7 @@ function initGame() {
         ouchSound.setVolume(0.5);
     });
 
+    let danceMusic;
     audioLoader.load('mash.mp3', (buffer) => {
         danceMusic = new THREE.Audio(audioListener);
         danceMusic.setBuffer(buffer);
@@ -1136,7 +2505,11 @@ function initGame() {
 
         // Create player model with the loaded head
         player = createPlayer(head);
-        player.position.set(0, 3, 0);
+
+        // Load face after player is created
+        const savedFace = localStorage.getItem('rogold_face') || 'OriginalGlitchedFace.webp';
+        addFaceToPlayer(player, savedFace);
+        player.position.set(0, 2, 0); // Place player exactly at ground level
         scene.add(player);
 
         controls = new OrbitControls(camera, renderer.domElement);
@@ -1153,6 +2526,7 @@ function initGame() {
         camera.position.set(0, 10, 15);
 
         cameraOffset = new THREE.Vector3(0, 5, 15);
+        baseCameraOffset = cameraOffset.clone();
 
         // This listener will handle all clicks/taps on the page to play the sound
         // and ensures the AudioContext is started.
@@ -1174,7 +2548,7 @@ function initGame() {
 
         // Initialize socket connection after player is created
         initSocket();
-
+    
         animate(); // Start animation loop after player is created
 
     }, undefined, (error) => {
@@ -1194,8 +2568,29 @@ function initGame() {
     createSpawnPoint();
     createSkybox();
 
+    // Load studio test objects if in test mode
+    loadStudioTestObjects();
+
     initUI(); // Initialize UI event listeners
     initMobileControls();
+
+    // Load saved options
+    audioMuted = localStorage.getItem('rogold_audio_muted') === 'true';
+    pixelatedEffectEnabled = localStorage.getItem('rogold_pixelated_enabled') !== 'false'; // Default to true
+
+    // Update UI to reflect saved settings
+    document.getElementById('mute-toggle').checked = audioMuted;
+    document.getElementById('pixelated-toggle').checked = pixelatedEffectEnabled;
+    document.getElementById('options-mute-toggle').checked = audioMuted;
+    document.getElementById('options-pixelated-toggle').checked = pixelatedEffectEnabled;
+
+    // Load saved face (will be handled by updateFaceSelector)
+
+    // Apply initial settings
+    updatePixelatedEffect();
+
+    // Apply initial mute setting
+    applyMuteSetting();
 
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
@@ -1211,18 +2606,55 @@ function initGame() {
 
 // Adicione o corpo físico do player:
 function ensurePlayerPhysicsBody() {
-    if (!player.userData.body) {
-        const playerShape = new CANNON.Box(new CANNON.Vec3(1, 3, 1));
-        const playerBody = new CANNON.Body({
-            mass: 0,
-            position: new CANNON.Vec3(player.position.x, player.position.y, player.position.z),
-            shape: playerShape,
+    if (player && !player.userData.body) {
+        // Create single unified body shape for better ground alignment
+        const playerShape = new CANNON.Box(new CANNON.Vec3(1, 2, 1));
+
+        // Create body
+        const body = new CANNON.Body({
+            mass: 5,
+            material: new CANNON.Material({
+                friction: ROBLOX_FRICTION,
+                restitution: 0 // No bounce to prevent floating
+            }),
+            linearDamping: ROBLOX_LINEAR_DAMPING,
+            angularDamping: ROBLOX_ANGULAR_DAMPING,
+            fixedRotation: true,
             collisionFilterGroup: 1,
-            collisionFilterMask: 2
+            collisionFilterMask: -1
         });
-        playerBody.userData = { mesh: player, isPlayer: true, playerId: playerId };
-        physicsWorld.addBody(playerBody);
-        player.userData.body = playerBody;
+
+        // Add single shape centered on the player model
+        body.addShape(playerShape, new CANNON.Vec3(0, 0, 0));
+
+        // Position the physics body at the player's current visual position so
+        // collisions and ground detection line up with the mesh.
+        if (player.position) {
+            body.position.set(player.position.x, player.position.y, player.position.z);
+        }
+
+        // Small safety: prevent body from ever going to sleep (classic Roblox behaviour)
+        body.allowSleep = false;
+
+        // Listen for collisions on the player body and mark that the player can jump
+        // when a contact with an upward-facing normal occurs.
+        body.addEventListener('collide', (e) => {
+            try {
+                const contact = e.contact;
+                if (!contact) return;
+                // contact.ni is the contact normal (from bi to bj). We accept contacts
+                // that have a significant Y component (roughly upwards).
+                const ny = contact.ni ? contact.ni.y : 0;
+                if (Math.abs(ny) > 0.5) {
+                    canJump = true;
+                }
+            } catch (err) {
+                console.warn('Player collide handler error', err);
+            }
+        });
+
+        player.userData.body = body;
+        physicsWorld.addBody(body);
     }
 }
 
@@ -1243,12 +2675,12 @@ function createBaseplate() {
 
 function createSpawnPoint() {
     const spawnGroup = new THREE.Group();
-    
+
     // Create 3D spawn platform
     const spawnGeometry = new THREE.BoxGeometry(10, 0.5, 10);
     const textureLoader = new THREE.TextureLoader();
     const spawnTexture = textureLoader.load('spawn.png');
-    
+
     const topMaterial = new THREE.MeshLambertMaterial({ map: spawnTexture });
     const sideMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 });
 
@@ -1260,12 +2692,12 @@ function createSpawnPoint() {
         sideMaterial, // front
         sideMaterial  // back
     ];
-    
+
     const spawn = new THREE.Mesh(spawnGeometry, materials);
     spawn.position.y = 0.25;
     spawn.receiveShadow = false;
     spawnGroup.add(spawn);
-    
+
     scene.add(spawnGroup);
 }
 
@@ -1276,13 +2708,190 @@ function createSkybox() {
     skyTexture.wrapS = THREE.RepeatWrapping;
     skyTexture.wrapT = THREE.RepeatWrapping;
     skyTexture.repeat.set(1, 1);
-    
+
     const skyMaterial = new THREE.MeshBasicMaterial({
         map: skyTexture,
         side: THREE.BackSide
     });
     const sky = new THREE.Mesh(skyGeometry, skyMaterial);
     scene.add(sky);
+}
+
+
+async function loadStudioTestObjects() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const gameId = urlParams.get('game');
+
+    // Check if we're loading a published game or test mode
+    if (gameId) {
+        // Load published game from server
+        try {
+            const response = await fetch(`/api/games/${gameId}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const gameData = await response.json();
+            await loadPublishedGame(gameData);
+        } catch (error) {
+            console.error('Failed to load published game:', error);
+            // Fallback to default game
+        }
+    } else if (urlParams.get('test') && urlParams.get('studio')) {
+        // Original test mode functionality
+        const testData = sessionStorage.getItem('rogold_studio_test');
+        if (!testData) return;
+
+        isTestMode = true; // Set test mode flag
+
+        try {
+            const data = JSON.parse(testData);
+            await loadGameData(data);
+        } catch (error) {
+            console.error('Failed to load studio test objects:', error);
+        }
+    }
+}
+
+async function loadPublishedGame(gameData) {
+    console.log('Loading published game:', gameData.title);
+    await loadGameData(gameData, true);
+}
+
+async function loadGameData(data, isPublished = false) {
+    console.log('Loading game data:', data);
+    // Load manual objects (parts, etc.) first so scripts can reference them
+    if (data.objects) {
+        console.log('Found objects:', data.objects);
+        Object.values(data.objects).forEach(objData => {
+            console.log('Processing object:', objData);
+            if (objData.ClassName === 'Part') {
+                console.log('Creating part:', objData.Name);
+                const geometry = new THREE.BoxGeometry(
+                    objData.Size[0],
+                    objData.Size[1],
+                    objData.Size[2]
+                );
+                const material = new THREE.MeshLambertMaterial({
+                    color: new THREE.Color(objData.Color[0], objData.Color[1], objData.Color[2])
+                });
+                const part = new THREE.Mesh(geometry, material);
+                part.position.set(objData.Position[0], objData.Position[1], objData.Position[2]);
+                if (objData.Rotation) {
+                    part.rotation.set(objData.Rotation[0], objData.Rotation[1], objData.Rotation[2]);
+                }
+                part.castShadow = true;
+                part.receiveShadow = true;
+                scene.add(part);
+                console.log('Part added to scene at position:', part.position.toArray());
+
+                // Create Roblox instance for the part
+                const robloxPart = new RobloxInstance('Part', objData.Name);
+                robloxPart.threeObject = part;
+                robloxPart.Position = part.position.clone();
+                robloxPart.Size = new THREE.Vector3(objData.Size[0], objData.Size[1], objData.Size[2]);
+                robloxPart.Color = new THREE.Color(objData.Color[0], objData.Color[1], objData.Color[2]);
+                robloxPart.CanCollide = objData.CanCollide !== false;
+                robloxPart.Anchored = objData.Anchored !== false;
+                robloxPart.Transparency = objData.Transparency || 0;
+
+                // Apply transparency
+                if (robloxPart.Transparency > 0) {
+                    part.material.transparent = true;
+                    part.material.opacity = 1 - robloxPart.Transparency;
+                }
+
+                luaObjects[objData.Name] = robloxPart;
+
+                // Add physics if canCollide
+                if (robloxPart.CanCollide && physicsWorld) {
+                    const shape = new CANNON.Box(new CANNON.Vec3(
+                        objData.Size[0] / 2,
+                        objData.Size[1] / 2,
+                        objData.Size[2] / 2
+                    ));
+                    const body = new CANNON.Body({
+                        mass: robloxPart.Anchored ? 0 : 1,
+                        position: new CANNON.Vec3(
+                            objData.Position[0],
+                            objData.Position[1],
+                            objData.Position[2]
+                        ),
+                        shape: shape,
+                        material: partMaterial,
+                        collisionFilterGroup: 1, // Dynamic parts group
+                        collisionFilterMask: -1 // Collide with all
+                    });
+                    body.userData = { mesh: part, instance: robloxPart };
+
+                    // Add collision event listener
+                    body.addEventListener('collide', (e) => {
+                        const otherBody = e.body;
+                        const contact = e.contact;
+
+                        // Trigger Touched event if the instance has a Touched connection
+                        if (robloxPart.touched && typeof robloxPart.touched === 'function') {
+                            robloxPart.touched(otherBody.userData?.instance || otherBody);
+                        }
+
+                        // Apply Roblox-style collision response
+                        if (contact.getImpactVelocityAlongNormal() > 5) {
+                            const bounceForce = contact.getImpactVelocityAlongNormal() * 0.5;
+                            const normal = contact.ni;
+                            body.applyImpulse(
+                                new CANNON.Vec3(
+                                    normal.x * bounceForce,
+                                    normal.y * bounceForce,
+                                    normal.z * bounceForce
+                                ),
+                                new CANNON.Vec3(0, 0, 0)
+                            );
+                        }
+                    });
+
+                    physicsWorld.addBody(body);
+                    robloxPart.cannonBody = body;
+                }
+            }
+        });
+    }
+
+    // Load and execute scripts after objects are loaded
+    if (data.scripts) {
+        for (const [scriptName, scriptData] of Object.entries(data.scripts)) {
+            // Skip 'Main Script' for published games to prevent duplicate objects and unintended execution
+            if (isPublished && scriptName === 'Main Script') {
+                console.log('Skipping Main Script for published game');
+                continue;
+            }
+
+            if (scriptData && typeof scriptData === 'string') {
+                // Handle case where scriptData is just the source string
+                const source = scriptData;
+                try {
+                    console.log('Executing script:', scriptName);
+                    const actions = interpretLuaScript(source);
+                    console.log('Parsed actions for script:', scriptName, actions);
+                    await executeLuaActions(actions);
+                    console.log('Successfully executed script:', scriptName);
+                } catch (error) {
+                    console.error('Failed to execute script:', scriptName, error);
+                }
+            } else if (scriptData.source) {
+                // Handle case where scriptData is an object with source property
+                try {
+                    console.log('Executing script:', scriptName);
+                    const actions = interpretLuaScript(scriptData.source);
+                    console.log('Parsed actions for script:', scriptName, actions);
+                    await executeLuaActions(actions);
+                    console.log('Successfully executed script:', scriptName);
+                } catch (error) {
+                    console.error('Failed to execute script:', scriptName, error);
+                }
+            }
+        }
+    }
+
+    console.log('Loaded game objects and scripts');
 }
 
 function emitColorChange() {
@@ -1296,7 +2905,6 @@ function emitColorChange() {
     };
     socket.emit('playerCustomize', colors);
 }
-
 
 function updateControls() {
     const mobileActive = areMobileControlsActive();
@@ -1438,6 +3046,22 @@ function initUI() {
         emitColorChange();
     });
 
+    // Listen for face changes from catalog (index.js)
+    window.addEventListener('rogold_equipped_face_changed', () => {
+        const equippedFace = localStorage.getItem('rogold_face');
+        if (equippedFace && ownedFaces.includes(equippedFace)) {
+            addFaceToPlayer(player, equippedFace);
+            // Update the face selector to match
+            const faceSelect = document.getElementById('face-select');
+            if (faceSelect) {
+                faceSelect.value = equippedFace;
+            }
+        }
+    });
+
+    // For testing: unlock Epic face (remove this in production)
+    // unlockFace('epicface.png');
+
     zoomInBtn.addEventListener('mousedown', () => {
         zoomCameraIn = true;
     });
@@ -1511,7 +3135,14 @@ function initMobileControls() {
 
     const handleJump = () => {
         if (canJump === true) {
-            velocity.y += 50;
+            if (player.userData.body) {
+                // Reset vertical velocity and clear most horizontal momentum before jumping
+                player.userData.body.velocity.y = 0;
+                player.userData.body.velocity.x = 0;
+                player.userData.body.velocity.z = 0;
+                // Apply upward impulse
+                player.userData.body.applyImpulse(new CANNON.Vec3(0, JUMP_IMPULSE, 0), CANNON.Vec3.ZERO);
+            }
             canJump = false;
             if (jumpSound && jumpSound.buffer) {
                 if (jumpSound.isPlaying) jumpSound.stop();
@@ -1535,6 +3166,7 @@ function respawnPlayer() {
     isRespawning = true;
 
     // Update health to 0 when dying
+    playerHealth = 0;
     document.getElementById('health-text').textContent = '0';
     document.getElementById('health-fill').style.width = '0%';
 
@@ -1571,7 +3203,7 @@ function respawnPlayer() {
         // Create physics body
         const partSize = new THREE.Vector3();
         new THREE.Box3().setFromObject(part).getSize(partSize);
-        
+
         const shape = new CANNON.Box(new CANNON.Vec3(partSize.x / 2, partSize.y / 2, partSize.z / 2));
         const body = new CANNON.Body({
             mass: 1,
@@ -1580,7 +3212,9 @@ function respawnPlayer() {
             shape: shape,
             material: partMaterial,
             angularDamping: 0.5, // helps stop rolling
-            linearDamping: 0.1
+            linearDamping: 0.1,
+            collisionFilterGroup: 1, // Dynamic parts group
+            collisionFilterMask: -1 // Collide with all
         });
 
         // Apply explosion-like impulse
@@ -1590,6 +3224,10 @@ function respawnPlayer() {
              (Math.random() - 0.5) * 40
         );
         body.applyImpulse(impulse, CANNON.Vec3.ZERO);
+
+        // Set collision filtering for fallen parts
+        body.collisionFilterGroup = 1; // Dynamic parts group
+        body.collisionFilterMask = -1; // Collide with all
 
         physicsWorld.addBody(body);
         
@@ -1614,11 +3252,16 @@ function respawnPlayer() {
         });
         fallenParts = [];
 
-        player.position.set(0, 3, 0);
-        velocity.set(0, 0, 0);
+        player.position.set(0, -2
+            , 0);
+        if (player.userData.body) {
+            player.userData.body.position.set(0, 3, 0);
+            player.userData.body.velocity.set(0, 0, 0);
+        }
         player.visible = true;
-        
+
         // Update health to 100 when respawning
+        playerHealth = 100;
         document.getElementById('health-text').textContent = '100';
         document.getElementById('health-fill').style.width = '100%';
         
@@ -1640,10 +3283,25 @@ function onWindowResize() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 
-    // Update render target size to match aspect ratio
-    const lowResWidth = 320;
-    const lowResHeight = Math.round(lowResWidth / (window.innerWidth / window.innerHeight));
-    renderTarget.setSize(lowResWidth, lowResHeight);
+    updatePixelatedEffect();
+}
+
+function updatePixelatedEffect() {
+    if (pixelatedEffectEnabled) {
+        // Use a fixed low resolution that's independent of screen size
+        const lowResWidth = 1600;
+        const lowResHeight = 600;
+        renderTarget.setSize(lowResWidth, lowResHeight);
+        renderTarget.texture.minFilter = THREE.NearestFilter;
+        renderTarget.texture.magFilter = THREE.NearestFilter;
+    } else {
+        // Render at full resolution
+        const renderTargetSize = new THREE.Vector2();
+        renderer.getDrawingBufferSize(renderTargetSize);
+        renderTarget.setSize(renderTargetSize.x, renderTargetSize.y);
+        renderTarget.texture.minFilter = THREE.LinearFilter;
+        renderTarget.texture.magFilter = THREE.LinearFilter;
+    }
 }
 
 // Helper to check if chat input is focused
@@ -1693,7 +3351,14 @@ function onKeyDown(event) {
             break;
         case 'Space':
             if (canJump === true) {
-                velocity.y += 50;
+                if (player.userData.body) {
+                    // Reset vertical velocity and clear most horizontal momentum before jumping
+                    player.userData.body.velocity.y = 0;
+                    player.userData.body.velocity.x = 0;
+                    player.userData.body.velocity.z = 0;
+                    // Apply upward impulse
+                    player.userData.body.applyImpulse(new CANNON.Vec3(0, JUMP_IMPULSE, 0), CANNON.Vec3.ZERO);
+                }
                 canJump = false;
                 if (jumpSound && jumpSound.buffer) {
                     if (jumpSound.isPlaying) jumpSound.stop();
@@ -1812,8 +3477,6 @@ function startLoadingScreen() {
 }
 
 startLoadingScreen();
-
-
 
 let equippedTool = null;
 let rocketLauncherModel = null;
@@ -1972,8 +3635,6 @@ function animate() {
     const particle = explodingParticles[i];
     const elapsedTime = (performance.now() - particle.userData.creationTime) / 1000;
 
-    startLoadingScreen();
-
     // Aplica gravidade à velocidade da partícula
     particle.userData.velocity.y -= 9.82 * delta * 2; // gravidade
 
@@ -1996,12 +3657,14 @@ function animate() {
     }
 }
 
-    // Interpolate other players
-    for (const id in otherPlayers) {
-        const remotePlayer = otherPlayers[id];
-        if (remotePlayer.userData.targetPosition && remotePlayer.userData.targetQuaternion) {
-            remotePlayer.position.lerp(remotePlayer.userData.targetPosition, 0.2);
-            remotePlayer.quaternion.slerp(remotePlayer.userData.targetQuaternion, 0.2);
+    // Interpolate other players (optimized)
+    if (performance.now() % 3 < 1) { // Only interpolate every 3 frames
+        for (const id in otherPlayers) {
+            const remotePlayer = otherPlayers[id];
+            if (remotePlayer.userData.targetPosition && remotePlayer.userData.targetQuaternion) {
+                remotePlayer.position.lerp(remotePlayer.userData.targetPosition, 0.2);
+                remotePlayer.quaternion.slerp(remotePlayer.userData.targetQuaternion, 0.2);
+            }
         }
     }
 
@@ -2035,11 +3698,11 @@ if (remotePlayer.userData.isUnequipping) {
     remotePlayer.rightArm.rotation.x = THREE.MathUtils.lerp(start, target, t);
 
     if (t >= 1) {
-    remotePlayer.userData.isUnequipping = false;
-    remotePlayer.userData.isEquipped = false; // <--- solta arma
-    remotePlayer.rightArm.rotation.x = target; // volta pro normal
-    if (model && model.parent) model.parent.remove(model);
-    if (model) model.visible = false;
+        remotePlayer.userData.isUnequipping = false;
+        remotePlayer.userData.isEquipped = false; // <--- solta arma
+        remotePlayer.rightArm.rotation.x = target; // volta pro normal
+        if (model && model.parent) model.parent.remove(model);
+        if (model) model.visible = false;
 }
 }
 
@@ -2050,7 +3713,8 @@ if (remotePlayer.userData.isEquipped) {
 
 
     // Step physics world
-    physicsWorld.step(fixedTimeStep, delta, 3);
+    physicsWorld.step(fixedTimeStep, delta, 20); // Much higher iterations for stability
+
 
     // Animate fallen parts with physics
     if (isRespawning) {
@@ -2061,30 +3725,92 @@ if (remotePlayer.userData.isEquipped) {
         });
     }
 
-    // Handle camera keyboard controls
-    const cameraRotationSpeed = 1.5;
-    const cameraZoomSpeed = 15.0;
+    // Sync physics bodies with three.js objects for script-created parts
+    Object.values(luaObjects).forEach(obj => {
+        if (obj.cannonBody && obj.threeObject) {
+            if (obj.Anchored) {
+                // For anchored parts, sync physics body to three.js object
+                obj.cannonBody.position.copy(obj.threeObject.position);
+                obj.cannonBody.quaternion.setFromEuler(
+                    obj.threeObject.rotation.x,
+                    obj.threeObject.rotation.y,
+                    obj.threeObject.rotation.z
+                );
+            } else {
+                // For unanchored parts, sync three.js object to physics body
+                obj.threeObject.position.copy(obj.cannonBody.position);
+                obj.threeObject.quaternion.copy(obj.cannonBody.quaternion);
+            }
+        }
+    });
 
-    if (rotateCameraLeft) {
-        cameraOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraRotationSpeed * delta);
-    }
-    if (rotateCameraRight) {
-        cameraOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), -cameraRotationSpeed * delta);
-    }
-    if (zoomCameraIn) {
-        cameraOffset.multiplyScalar(1.0 - cameraZoomSpeed * delta * 0.1);
-    }
-    if (zoomCameraOut) {
-        cameraOffset.multiplyScalar(1.0 + cameraZoomSpeed * delta * 0.1);
-    }
 
-    // Clamp zoom distance
-    const distance = cameraOffset.length();
-    if (distance < controls.minDistance) {
-        cameraOffset.setLength(controls.minDistance);
-    }
-    if (distance > controls.maxDistance) {
-        cameraOffset.setLength(controls.maxDistance);
+    // Animate spinning parts from Lua scripts
+    Object.values(luaObjects).forEach(obj => {
+        if (obj.isSpinning && obj.threeObject) {
+            const rotationSpeed = 4; // radians per second
+            const axis = obj.spinAxis || new THREE.Vector3(0, 1, 0);
+            obj.threeObject.rotateOnAxis(axis.normalize(), rotationSpeed * delta);
+            obj.Rotation.x += axis.x * rotationSpeed * delta;
+            obj.Rotation.y += axis.y * rotationSpeed * delta;
+            obj.Rotation.z += axis.z * rotationSpeed * delta;
+            if (obj.cannonBody) {
+                obj.cannonBody.quaternion.setFromEuler(obj.Rotation.x, obj.Rotation.y, obj.Rotation.z);
+            }
+        }
+    });
+
+    // Animate spinning parts from RobloxEnvironment
+    spinningParts.forEach(part => {
+        if (part.threeObject) {
+            const rotationSpeed = 4; // radians per second
+            const axis = part.spinAxis || new THREE.Vector3(0, 1, 0);
+            part.threeObject.rotateOnAxis(axis.normalize(), rotationSpeed * delta);
+            part.Rotation.x += axis.x * rotationSpeed * delta;
+            part.Rotation.y += axis.y * rotationSpeed * delta;
+            part.Rotation.z += axis.z * rotationSpeed * delta;
+            if (part.cannonBody) {
+                part.cannonBody.quaternion.setFromEuler(part.Rotation.x, part.Rotation.y, part.Rotation.z);
+            }
+        }
+    });
+
+    // Handle camera keyboard controls (optimized)
+    if (true) { // Always update camera for smooth movement
+        const cameraRotationSpeed = 3.0; // Higher rotation speed
+        const cameraZoomSpeed = 20.0;
+
+        // Update camera rotation
+        if (rotateCameraLeft) {
+            const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), cameraRotationSpeed * delta);
+            cameraOffset.applyQuaternion(rotation);
+            // Also rotate the movement reference
+            baseCameraOffset.applyQuaternion(rotation);
+        }
+        if (rotateCameraRight) {
+            const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -cameraRotationSpeed * delta);
+            cameraOffset.applyQuaternion(rotation);
+            // Also rotate the movement reference
+            baseCameraOffset.applyQuaternion(rotation);
+        }
+        if (zoomCameraIn) {
+            cameraOffset.multiplyScalar(1.0 - cameraZoomSpeed * delta * 0.1);
+        }
+        if (zoomCameraOut) {
+            cameraOffset.multiplyScalar(1.0 + cameraZoomSpeed * delta * 0.1);
+        }
+
+        // Clamp zoom distance
+        const distance = cameraOffset.length();
+        if (distance < controls.minDistance) {
+            cameraOffset.setLength(controls.minDistance);
+        }
+        if (distance > controls.maxDistance) {
+            cameraOffset.setLength(controls.maxDistance);
+        }
+
+        // Update baseCameraOffset to reflect current rotation for movement calculations
+        baseCameraOffset.copy(cameraOffset).normalize().multiplyScalar(baseCameraOffset.length());
     }
 
     if (isRespawning) {
@@ -2099,78 +3825,182 @@ if (remotePlayer.userData.isEquipped) {
         return; // Skip player logic while respawning
     }
 
-    velocity.y -= 9.8 * 20.0 * delta;
+    // Physics-based movement with proper velocity accumulation
+    ensurePlayerPhysicsBody();
+    let isMoving = false;
+    if (player.userData.body) {
+        // Build raw input from digital keys / joystick axes
+        const inputX = Number(moveRight) - Number(moveLeft);
+        const inputZ = Number(moveForward) - Number(moveBackward);
 
-    direction.z = Number(moveForward) - Number(moveBackward);
-    direction.x = Number(moveRight) - Number(moveLeft);
-    direction.normalize();
+        // Preserve analog magnitude when available; clamp magnitude to 1 for digital input so diagonals aren't faster
+        const inputVec2 = new THREE.Vector2(inputX, inputZ);
+        let inputMag = inputVec2.length();
+        if (inputMag > 1) {
+            inputVec2.normalize();
+            inputMag = 1.2;
+        }
 
-    if (true) {
-        const isMoving = direction.length() > 0.001;
+        isMoving = inputMag > 0.001;
 
         if (isMoving) {
-            const cameraDirection = new THREE.Vector3();
-            camera.getWorldDirection(cameraDirection);
-            cameraDirection.y = 0;
-            cameraDirection.normalize();
+            // Calculate precise camera-relative movement vectors using world quaternion
+            const camQuat = new THREE.Quaternion();
+            camera.getWorldQuaternion(camQuat);
 
-            const rightDirection = new THREE.Vector3().crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0)).normalize();
-            
-            const moveDirection = cameraDirection.clone().multiplyScalar(direction.z).add(rightDirection.clone().multiplyScalar(direction.x));
-            moveDirection.normalize();
+            // Get forward and right from camera quaternion, then remove vertical component
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camQuat);
+            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camQuat);
+            forward.y = 0; forward.normalize();
+            right.y = 0; right.normalize();
 
-            player.position.add(moveDirection.clone().multiplyScalar(playerSpeed * delta));
-            
-            if (moveDirection.length() > 0.1) {
-                player.rotation.y = Math.atan2(moveDirection.x, moveDirection.z);
+            // Create movement vector using precise directional control
+            const moveDir = new THREE.Vector3();
+
+            // Handle diagonal movement with proper normalization
+            if (Math.abs(inputVec2.x) > 0.001 || Math.abs(inputVec2.y) > 0.001) {
+                // Add forward/backward movement
+                if (Math.abs(inputVec2.y) > 0.001) {
+                    moveDir.add(forward.multiplyScalar(inputVec2.y));
+                }
+                
+                // Add left/right movement
+                if (Math.abs(inputVec2.x) > 0.001) {
+                    moveDir.add(right.multiplyScalar(inputVec2.x));
+                }
+
+                // Normalize to ensure consistent speed in all directions
+                moveDir.normalize();
+
+                // For diagonal movement, maintain proper 45-degree angles
+                if (Math.abs(inputVec2.x) > 0.001 && Math.abs(inputVec2.y) > 0.001) {
+                    moveDir.multiplyScalar(Math.SQRT2);
+                }
+            }
+
+            // Fixed speed calculation for perfect directional control
+            const targetSpeed = 45; // Base movement speed
+            const airControlFactor = player.userData.body && typeof canJump === 'boolean' ? (canJump ? 1.0 : 0.25) : 1.0;
+            // Calculate speed while preserving directional precision
+            const speed = targetSpeed * airControlFactor * (moveDir.length() > 0 ? 1 : 0);
+
+            // Apply velocity
+            playerVelocity.copy(moveDir).multiplyScalar(speed);
+            player.userData.body.velocity.x = playerVelocity.x;
+            player.userData.body.velocity.z = playerVelocity.z;
+
+            if (moveDir.length() > 0.1) {
+                // Compute desired yaw so the player's forward axis aligns with movement.
+                // Use atan2(x, z) to match the model's forward orientation.
+                // Only update rotation when actually moving (not just camera rotating)
+                if (Math.abs(inputVec2.x) > 0.001 || Math.abs(inputVec2.y) > 0.001) {
+                    const desiredYaw = Math.atan2(moveDir.x, moveDir.z);
+                    
+                    // Smooth rotation instead of instant
+                    const rotationSpeed = 10;
+                    // Compute shortest signed angle difference between current and desired yaw
+                    const diff = desiredYaw - player.rotation.y;
+                    const TWO_PI = Math.PI * 2;
+                    let deltaAngle = ((diff + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI;
+                    player.rotation.y += deltaAngle * Math.min(1, rotationSpeed * delta);
+                    
+                    // Sync physics body rotation
+                    player.userData.body.quaternion.setFromEuler(0, player.rotation.y, 0);
+                }
             }
         } else {
-            if (walkSound && walkSound.isPlaying) {
-                walkSound.stop();
+            // Stop immediately when no input (only damp horizontal while on ground)
+            if (canJump) {
+                playerVelocity.set(0, 0, 0);
+                player.userData.body.velocity.x = 0;
+                player.userData.body.velocity.z = 0;
+                if (walkSound && walkSound.isPlaying) walkSound.stop();
+            } else {
+                // While airborne, do not abruptly zero horizontal velocity (keeps natural arc)
+                // Optionally apply mild damping in air
+                player.userData.body.velocity.x *= 0.98;
+                player.userData.body.velocity.z *= 0.98;
             }
         }
-        
-        // Animation logic
-        const isMovingOnGround = isMoving && canJump;
-
-        if (!canJump) {
-            animationTime = 0;
-            const jumpAngle = -Math.PI;
-            player.leftArm.rotation.x = THREE.MathUtils.lerp(player.leftArm.rotation.x, jumpAngle, 0.2);
-            player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, jumpAngle, 0.2);
-            player.leftLeg.rotation.x = THREE.MathUtils.lerp(player.leftLeg.rotation.x, 0, 0.1);
-            player.rightLeg.rotation.x = THREE.MathUtils.lerp(player.rightLeg.rotation.x, 0, 0.1);
-
-        } else if (isMovingOnGround) {
-            animationTime += delta * 10;
-            const swingAngle = Math.sin(animationTime) * 0.8;
-            player.leftArm.rotation.x = swingAngle;
-            player.rightArm.rotation.x = -swingAngle;
-            player.leftLeg.rotation.x = -swingAngle;
-            player.rightLeg.rotation.x = swingAngle;
-        } else {
-            animationTime = 0;
-            player.leftArm.rotation.x = THREE.MathUtils.lerp(player.leftArm.rotation.x, 0, 0.1);
-            player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, 0, 0.1);
-            player.leftLeg.rotation.x = THREE.MathUtils.lerp(player.leftLeg.rotation.x, 0, 0.1);
-            player.rightLeg.rotation.x = THREE.MathUtils.lerp(player.rightLeg.rotation.x, 0, 0.1);
-        }
+    } else {
+        console.error('Debug: Player physics body not found!');
     }
 
-    player.position.y += (velocity.y * delta);
+    // Animation logic
+    const isMovingOnGround = isMoving && canJump;
 
-    if (player.position.y < 3) {
-        velocity.y = 0;
-        player.position.y = 3;
-        canJump = true;
+    if (!canJump) {
+        animationTime = 0;
+        const jumpAngle = -Math.PI;
+        player.leftArm.rotation.x = THREE.MathUtils.lerp(player.leftArm.rotation.x, jumpAngle, 0.2);
+        player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, jumpAngle, 0.2);
+        player.leftLeg.rotation.x = THREE.MathUtils.lerp(player.leftLeg.rotation.x, 0, 0.1);
+        player.rightLeg.rotation.x = THREE.MathUtils.lerp(player.rightLeg.rotation.x, 0, 0.1);
+
+    } else if (isMovingOnGround) {
+        animationTime += delta * 10;
+        const swingAngle = Math.sin(animationTime) * 0.8;
+        // Choose swing direction based on local movement (so strafing animates correctly)
+        let swingSign = 1;
+        try {
+            const worldVel = new THREE.Vector3(player.userData.body.velocity.x, 0, player.userData.body.velocity.z);
+            if (worldVel.length() > 0.001) {
+                // Player forward in world space (-Z) rotated by player's Y rotation
+                const forwardVec = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, player.rotation.y, 0));
+                const rightVec = new THREE.Vector3(1, 0, 0).applyEuler(new THREE.Euler(0, player.rotation.y, 0));
+                const localZ = worldVel.dot(forwardVec);
+                const localX = worldVel.dot(rightVec);
+                // Use the dominant axis to determine sign (forward/back vs strafe)
+                const dominant = Math.abs(localZ) >= Math.abs(localX) ? localZ : localX;
+                swingSign = dominant >= 0 ? 1 : -1;
+            }
+        } catch (e) {
+            swingSign = 1;
+        }
+
+        player.leftArm.rotation.x = swingAngle * swingSign;
+        player.rightArm.rotation.x = -swingAngle * swingSign;
+        player.leftLeg.rotation.x = -swingAngle * swingSign;
+        player.rightLeg.rotation.x = swingAngle * swingSign;
+    } else {
+        animationTime = 0;
+        player.leftArm.rotation.x = THREE.MathUtils.lerp(player.leftArm.rotation.x, 0, 0.1);
+        player.rightArm.rotation.x = THREE.MathUtils.lerp(player.rightArm.rotation.x, 0, 0.1);
+        player.leftLeg.rotation.x = THREE.MathUtils.lerp(player.leftLeg.rotation.x, 0, 0.1);
+        player.rightLeg.rotation.x = THREE.MathUtils.lerp(player.rightLeg.rotation.x, 0, 0.1);
+    }
+
+    // Ground collision detection for jumping
+    if (player.userData.body) {
+        // Check if player is on ground or parts by checking contacts
+        const contacts = physicsWorld.contacts;
+        canJump = false;
+        let groundContacts = 0;
+
+        for (let i = 0; i < contacts.length; i++) {
+            const contact = contacts[i];
+            const isPlayerContact = (contact.bi === player.userData.body || contact.bj === player.userData.body);
+            const isGroundContact = (contact.bi.userData?.isGround || contact.bj.userData?.isGround);
+            const isPartContact = (contact.bi.userData?.instance || contact.bj.userData?.instance);
+            
+            if (isPlayerContact && (isGroundContact || isPartContact)) {
+                // Check if the contact normal is pointing upward (ground contact)
+                const normal = contact.ni;
+                if (normal.y > 0.5) {  // Contact is mostly vertical
+                    canJump = true;
+                    groundContacts++;
+                }
+            }
+        }
     }
 
     // Send player position to server (throttled)
     if (socket && socket.connected && time > lastSentTime + sendInterval) {
+        const pos = player.userData.body ? player.userData.body.position : player.position;
         socket.emit('playerMove', {
-            x: player.position.x,
-            y: player.position.y,
-            z: player.position.z,
+            x: pos.x,
+            y: pos.y,
+            z: pos.z,
             rotation: player.rotation.y,
             isMoving: direction.length() > 0.001,
             isInAir: !canJump // <-- send whether player is in the air (jumping/falling)
@@ -2187,7 +4017,8 @@ if (remotePlayer.userData.isEquipped) {
         player.rightLeg.rotation.x = Math.cos(animationTime) * 0.8;
         player.rotation.y += delta * 2; // Spin
         // Optionally, add a little bounce:
-        player.position.y = 3 + Math.abs(Math.sin(animationTime) * 0.2);
+        const baseY = player.userData.body ? player.userData.body.position.y : 3;
+        player.position.y = baseY + Math.abs(Math.sin(animationTime) * 0.2);
         // Render and return early to skip normal movement/animation
         // Camera follow logic
         const desiredPosition = player.position.clone().add(cameraOffset);
@@ -2203,20 +4034,64 @@ if (remotePlayer.userData.isEquipped) {
         return;
     }
 
-    // Animate other players' dances
-    Object.values(otherPlayers).forEach(otherPlayer => {
-        if (otherPlayer.isDancing) {
-            // Animate dance for this player
-            otherPlayer.animationTime = (otherPlayer.animationTime || 0) + delta * 8;
-            otherPlayer.leftArm.rotation.x = Math.sin(otherPlayer.animationTime) * 1.2 + 1.2;
-            otherPlayer.rightArm.rotation.x = Math.cos(otherPlayer.animationTime) * 1.2 + 1.2;
-            otherPlayer.leftLeg.rotation.x = Math.sin(otherPlayer.animationTime) * 0.8;
-            otherPlayer.rightLeg.rotation.x = Math.cos(otherPlayer.animationTime) * 0.8;
-            otherPlayer.rotation.y += delta * 2;
-            // Optionally, add a little bounce:
-            otherPlayer.position.y = 3 + Math.abs(Math.sin(otherPlayer.animationTime) * 0.2);
+    // Animate other players' dances (optimized)
+    if (performance.now() % 4 < 1) { // Only update every 4 frames
+        Object.values(otherPlayers).forEach(otherPlayer => {
+            if (otherPlayer.isDancing) {
+                // Animate dance for this player
+                otherPlayer.animationTime = (otherPlayer.animationTime || 0) + delta * 8;
+                otherPlayer.leftArm.rotation.x = Math.sin(otherPlayer.animationTime) * 1.2 + 1.2;
+                otherPlayer.rightArm.rotation.x = Math.cos(otherPlayer.animationTime) * 1.2 + 1.2;
+                otherPlayer.leftLeg.rotation.x = Math.sin(otherPlayer.animationTime) * 0.8;
+                otherPlayer.rightLeg.rotation.x = Math.cos(otherPlayer.animationTime) * 0.8;
+                otherPlayer.rotation.y += delta * 2;
+                // Optionally, add a little bounce:
+                const baseY = otherPlayer.userData.body ? otherPlayer.userData.body.position.y : 3;
+                otherPlayer.position.y = baseY + Math.abs(Math.sin(otherPlayer.animationTime) * 0.2);
+            }
+        });
+    }
+
+    // Update name tags (throttled)
+    if (performance.now() % 4 < 1) { // Only update every 4 frames
+        for (const id in otherPlayers) {
+            const remotePlayer = otherPlayers[id];
+            if (!remotePlayer) continue;
+
+            let nameTag = playerNameTags[id];
+            if (!nameTag) {
+                nameTag = document.createElement('div');
+                nameTag.className = 'player-name-tag';
+                nameTag.textContent = remotePlayer.userData.nickname || 'Guest';
+                nameTag.style.position = 'absolute';
+                nameTag.style.color = 'white';
+                nameTag.style.fontSize = '14px';
+                nameTag.style.fontFamily = 'Arial, sans-serif';
+                nameTag.style.textShadow = '1px 1px 1px black';
+                nameTag.style.pointerEvents = 'none';
+                nameTag.style.zIndex = 100;
+                document.body.appendChild(nameTag);
+                playerNameTags[id] = nameTag;
+            }
+
+            // Position above head
+            let headPos = new THREE.Vector3();
+            let headMesh = null;
+            remotePlayer.traverse(child => {
+                if (child.isMesh && child.name === "Head") headMesh = child;
+            });
+            const target = headMesh || remotePlayer;
+            target.getWorldPosition(headPos);
+            headPos.y += 2.5; // Above head
+
+            let screenPos = headPos.clone().project(camera);
+            let x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+            let y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+
+            nameTag.style.left = `${x - nameTag.offsetWidth / 2}px`;
+            nameTag.style.top = `${y - 20}px`;
         }
-    });
+    }
 
     // Camera follow logic
     const desiredPosition = player.position.clone().add(cameraOffset);
@@ -2227,13 +4102,7 @@ if (remotePlayer.userData.isEquipped) {
 
     controls.update();
 
-    const currentTime = performance.now();
-    if (currentTime > lastNicknameUpdateTime + nicknameUpdateInterval) {
-        updateNicknamePositions();
-        lastNicknameUpdateTime = currentTime;
-    }
-
-    prevTime = currentTime;
+    prevTime = performance.now();
 
     // Render scene to low-res render target
     renderer.setRenderTarget(renderTarget);
@@ -2250,6 +4119,7 @@ if (remotePlayer.userData.isEquipped) {
     // --- Equip animation for rocket launcher ---
 
     if (isEquipping) {
+
         equipAnimProgress += delta;
         const t = Math.min(equipAnimProgress / equipAnimDuration,  1);
         player.rightArm.rotation.x = THREE.MathUtils.lerp(
@@ -2266,66 +4136,74 @@ if (remotePlayer.userData.isEquipped) {
         player.rightArm.rotation.x = equipTargetRotation;
     }
 
-    if (player.userData.body) {
-        player.userData.body.position.copy(player.position);
+    if ( player.userData.body) {
+        // Sync visual position from physics body
+        const oldPosition = player.position.clone();
+        player.position.copy(player.userData.body.position);
+        player.position.y += 1.0; // Offset visual upward to align feet with physics body bottom
+
+        console.log('Debug: Body position after sync:', player.userData.body.position);
+        console.log('Debug: Visual position after sync:', player.position);
+
+        // Sync physics body rotation to match visual rotation
+        player.userData.body.quaternion.setFromEuler(0, player.rotation.y, 0);
     }
 
     ensurePlayerPhysicsBody();
 
-    // Atualiza e remove rockets
-for (let i = activeRockets.length - 1; i >= 0; i--) {
-    const rocketObj = activeRockets[i];
-    const { mesh, direction, ownerId } = rocketObj;
-    const moveStep = rocketSpeed * delta;
-    mesh.position.add(direction.clone().multiplyScalar(moveStep));
-    rocketObj.traveled += moveStep;
+    // Atualiza e remove rockets (optimized)
+    for (let i = activeRockets.length - 1; i >= 0; i--) {
+        const rocketObj = activeRockets[i];
+        const { mesh, direction, ownerId } = rocketObj;
+        const moveStep = rocketSpeed * delta;
+        mesh.position.add(direction.clone().multiplyScalar(moveStep));
+        rocketObj.traveled += moveStep;
 
-    // Colisão simples com player local (AABB)
-    if (
-        ownerId !== playerId &&
+        // Colisão simples com player local (AABB) - only check every few frames
+        if (performance.now() % 3 < 1) { // Check collision every 3 frames
+            if (
+                ownerId !== playerId &&
+                player.visible &&
+                mesh.position.distanceTo(player.position) < 2
+            ) {
+                // Take damage
+                playerHealth -= 25;
+                if (playerHealth <= 0) {
+                    respawnPlayer();
+                } else {
+                    // Update UI
+                    document.getElementById('health-text').textContent = playerHealth;
+                    document.getElementById('health-fill').style.width = `${(playerHealth / maxHealth) * 100}%`;
+                }
+                if (socket && socket.connected) {
+                    socket.emit('playerHit', { killer: ownerId, victim: playerId });
+                    socket.emit('explosion', { position: mesh.position });
+                }
+                scene.remove(mesh);
+                activeRockets.splice(i, 1);
+                continue;
+            }
+        }
 
-        player.visible &&
-        mesh.position.distanceTo(player.position) < 2
-    ) {
-        // Take damage
-        const damage = 50;
-        let currentHealth = parseInt(document.getElementById('health-text').textContent);
-        currentHealth = Math.max(0, currentHealth - damage);
-        document.getElementById('health-text').textContent = currentHealth;
-        document.getElementById('health-fill').style.width = currentHealth + '%';
-        player.userData.health = currentHealth;
-        if (currentHealth <= 0) {
-            respawnPlayer();
+        // Checa colisão com o chão (y <= 0)
+        if (mesh.position.y <= 0) {
+            if (socket && socket.connected) {
+                socket.emit('explosion', { position: mesh.position });
+            }
+            scene.remove(mesh);
+            activeRockets.splice(i, 1);
+            continue;
         }
-        if (socket && socket.connected) {
-            socket.emit('takeDamage', { damage });
-            socket.emit('explosion', { position: mesh.position });
+
+        // Remove se passou da distância máxima
+        if (rocketObj.traveled > rocketMaxDistance) {
+            if (socket && socket.connected) {
+                socket.emit('explosion', { position: mesh.position });
+            }
+            scene.remove(mesh);
+            activeRockets.splice(i, 1);
         }
-        scene.remove(mesh);
-        activeRockets.splice(i, 1);
-        continue;
     }
-
-    // Checa colisão com o chão (y <= 3)
-    if (mesh.position.y <= 3) {
-        if (socket && socket.connected) {
-            socket.emit('explosion', { position: mesh.position }); // <--- NOVO
-        }
-        scene.remove(mesh);
-        activeRockets.splice(i, 1);
-        continue;
-    }
-
-    // Remove se passou da distância máxima
-
-    if (rocketObj.traveled > rocketMaxDistance) {
-        if (socket && socket.connected) {
-            socket.emit('explosion', { position: mesh.position }); // <--- NOVO
-        }
-        scene.remove(mesh);
-        activeRockets.splice(i, 1);
-    }
-}
 }
 
 // Chat message handling
@@ -2341,6 +4219,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const menuBtn = document.getElementById('menu-btn');
     const gameMenu = document.getElementById('game-menu');
+    const optionsMenu = document.getElementById('options-menu');
     const resumeBtn = document.getElementById('resume-btn');
     const optionsBtn = document.getElementById('options-btn');
     const exitBtn = document.getElementById('exit-btn');
@@ -2356,12 +4235,107 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     optionsBtn.addEventListener('click', () => {
-        alert('Options menu coming soon!');
+        gameMenu.style.display = 'none';
+        optionsMenu.style.display = 'block';
+    });
+
+    const backToMenuBtn = document.getElementById('back-to-menu-btn');
+    const muteToggle = document.getElementById('mute-toggle');
+    const pixelatedToggle = document.getElementById('pixelated-toggle');
+    const optionsMuteToggle = document.getElementById('options-mute-toggle');
+    const optionsPixelatedToggle = document.getElementById('options-pixelated-toggle');
+
+    backToMenuBtn.addEventListener('click', () => {
+        optionsMenu.style.display = 'none';
+        gameMenu.style.display = 'block';
+    });
+
+    muteToggle.addEventListener('change', () => {
+        audioMuted = muteToggle.checked;
+        applyMuteSetting();
+        localStorage.setItem('rogold_audio_muted', audioMuted);
+        // Sync options menu toggle
+        if (optionsMuteToggle) optionsMuteToggle.checked = audioMuted;
+    });
+
+    pixelatedToggle.addEventListener('change', () => {
+        pixelatedEffectEnabled = pixelatedToggle.checked;
+        updatePixelatedEffect();
+        localStorage.setItem('rogold_pixelated_enabled', pixelatedEffectEnabled);
+        // Sync options menu toggle
+        if (optionsPixelatedToggle) optionsPixelatedToggle.checked = pixelatedEffectEnabled;
+    });
+
+    // Options menu toggles
+    optionsMuteToggle.addEventListener('change', () => {
+        audioMuted = optionsMuteToggle.checked;
+        applyMuteSetting();
+        localStorage.setItem('rogold_audio_muted', audioMuted);
+        // Sync main toggle
+        if (muteToggle) muteToggle.checked = audioMuted;
+    });
+
+    optionsPixelatedToggle.addEventListener('change', () => {
+        pixelatedEffectEnabled = optionsPixelatedToggle.checked;
+        updatePixelatedEffect();
+        localStorage.setItem('rogold_pixelated_enabled', pixelatedEffectEnabled);
+        // Sync main toggle
+        if (pixelatedToggle) pixelatedToggle.checked = pixelatedEffectEnabled;
     });
 
     exitBtn.addEventListener('click', () => {
         window.location.href = '/'; // Or any exit logic you want
     });
+
+    // Help button event listener
+    const helpBtn = document.getElementById('help-btn');
+    const helpTutorial = document.getElementById('help-tutorial');
+    const closeTutorialBtn = document.getElementById('close-tutorial-btn');
+
+    console.log('Debug: helpBtn found:', !!helpBtn);
+    console.log('Debug: helpTutorial found:', !!helpTutorial);
+    console.log('Debug: closeTutorialBtn found:', !!closeTutorialBtn);
+
+    if (helpBtn) {
+        helpBtn.addEventListener('click', () => {
+            console.log('Help button clicked: hiding game menu and showing tutorial');
+            console.log('Debug: gameMenu before:', gameMenu.style.display);
+            console.log('Debug: helpTutorial before:', helpTutorial.style.display);
+            gameMenu.style.display = 'none';
+            helpTutorial.style.display = 'block';
+            console.log('Debug: gameMenu after:', gameMenu.style.display);
+            console.log('Debug: helpTutorial after:', helpTutorial.style.display);
+        });
+    } else {
+        console.error('Debug: helpBtn not found!');
+    }
+
+    if (closeTutorialBtn) {
+        closeTutorialBtn.addEventListener('click', (event) => {
+            console.log('Close tutorial button clicked: hiding tutorial and showing game menu');
+            console.log('Debug: event target:', event.target);
+            console.log('Debug: helpTutorial before:', helpTutorial.style.display);
+            console.log('Debug: gameMenu before:', gameMenu.style.display);
+            helpTutorial.style.display = 'none';
+            gameMenu.style.display = 'block';
+            console.log('Debug: helpTutorial after:', helpTutorial.style.display);
+            console.log('Debug: gameMenu after:', gameMenu.style.display);
+        });
+        console.log('Debug: closeTutorialBtn event listener added successfully');
+    } else {
+        console.error('Debug: closeTutorialBtn not found!');
+    }
+
+    // Add debug logging for menu button to ensure menu opens
+    if (menuBtn) {
+        menuBtn.addEventListener('click', () => {
+            console.log('Menu button clicked: opening game menu');
+            console.log('Debug: gameMenu display before:', gameMenu.style.display);
+            gameMenu.style.display = 'block';
+            isMenuOpen = true;
+            console.log('Debug: gameMenu display after:', gameMenu.style.display);
+        });
+    }
 
     // ESC key closes menu
     document.addEventListener('keydown', (e) => {
@@ -2372,23 +4346,15 @@ window.addEventListener('DOMContentLoaded', () => {
  });
 });
 
-let isDancing = false;
-let danceMusic;
-
-let isMenuOpen = false;
-
-initGame();
-
-if (equippedTool === 'rocketLauncher' && !isEquipping) {
-    player.rightArm.rotation.x = -Math.PI / 2; // Keep arm straight
-}
-
 window.addEventListener('mousemove', (event) => {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
 });
 
 window.addEventListener('click', launchRocket);
+
+
+initGame();
 
 function addHatToPlayer(player, hatId) {
     // Remove chapéu antigo se houver
@@ -2423,7 +4389,7 @@ function addHatToPlayer(player, hatId) {
     hat.position.set(0, 0.256, -0.4);       // encaixe no head
     hat.rotation.set(1.9, Math.PI / 2, 0);
         } else if (hatId === 'hat_doge') {
-            hat.scale.set(1, 1, 1);
+            hat.scale.set(1.2, 1.2, 1.2);
             hat.position.set(0, 0.2, 0);
             hat.rotation.set(2, Math.PI, 0); // gira 180 graus no Y
         }
@@ -2456,34 +4422,96 @@ window.addEventListener('rogold_equipped_hat_changed', () => {
     }
 });
 
-window.addEventListener('rogold_equipped_face_changed', () => {
-    const faceId = localStorage.getItem('rogold_equipped_face') || 'default';
-    let faceTexturePath = 'OriginalGlitchedFace.webp';
-    if (faceId === 'face_epic') {
-        faceTexturePath = 'epicface.jpg';
-    }
-    const faceTextureLoader = new THREE.TextureLoader();
-    faceTextureLoader.load(faceTexturePath, (texture) => {
-        texture.minFilter = THREE.NearestFilter;
-        texture.magFilter = THREE.NearestFilter;
-        // Find the face mesh and update material
-        player.traverse(child => {
-            if (child.isMesh && child.name === "Head") {
-                // The face is a child of head
-                child.children.forEach(grandchild => {
-                    if (grandchild.material && grandchild.material.map) {
-                        grandchild.material.map = texture;
-                        grandchild.material.needsUpdate = true;
-                    }
-                });
-            }
-        });
-    });
-});
-
 function attachRocketLauncherToArm(arm, model) {
     model.position.set(0, -1, 0.5);
     model.rotation.set(1.5, Math.PI / 2, 0);
     model.visible = true;
     arm.add(model);
 }
+
+function addFaceToPlayer(player, faceId) {
+    if (!player || !faceId) return;
+
+    // Remove existing face if any
+    if (player.userData.facePlane) {
+        player.userData.facePlane.parent.remove(player.userData.facePlane);
+    }
+
+    // Load new face texture with callback
+    const faceTextureLoader = new THREE.TextureLoader();
+    faceTextureLoader.load(faceId, (faceTexture) => {
+        faceTexture.minFilter = THREE.NearestFilter;
+        faceTexture.magFilter = THREE.NearestFilter;
+        const faceMaterial = new THREE.MeshLambertMaterial({
+            map: faceTexture,
+            transparent: true,
+            alphaTest: 0.1,
+            side: THREE.DoubleSide // Make face visible from both sides
+        });
+
+        const faceGeometry = new THREE.PlaneGeometry(1.05, 1.05);
+        const facePlane = new THREE.Mesh(faceGeometry, faceMaterial);
+        facePlane.position.set(0, 0, 0.75);
+        facePlane.rotation.y = Math.PI; // Rotate to face forward
+
+        // Use stored head reference or find it
+        let head = player.userData.head;
+        if (!head) {
+            player.traverse(child => {
+                if (child.isMesh && child.name === "Head") head = child;
+            });
+        }
+        if (head) {
+            head.add(facePlane);
+            player.userData.faceId = faceId;
+            player.userData.facePlane = facePlane;
+        } else {
+            console.error('Head not found for face attachment');
+        }
+    }, undefined, (error) => {
+        console.error('Error loading face texture:', faceId, error);
+    });
+}
+
+function updateFaceSelector() {
+    const faceSelect = document.getElementById('face-select');
+    if (!faceSelect) return;
+
+    // Clear existing options
+    faceSelect.innerHTML = '';
+
+    // Define all available faces with their display names
+    const allFaces = {
+        'OriginalGlitchedFace.webp': 'Classic',
+        'epicface.png': 'Epic',
+        'daniel.png': 'Daniel'
+    };
+
+    // Add owned faces to selector
+    ownedFaces.forEach(faceId => {
+        if (allFaces[faceId]) {
+            const option = document.createElement('option');
+            option.value = faceId;
+            option.textContent = allFaces[faceId];
+            faceSelect.appendChild(option);
+        }
+    });
+
+    // Set current face if it's owned
+    const currentFace = localStorage.getItem('rogold_face') || 'OriginalGlitchedFace.webp';
+    if (ownedFaces.includes(currentFace)) {
+        faceSelect.value = currentFace;
+    } else {
+        // Default to first owned face
+        faceSelect.value = ownedFaces[0] || 'OriginalGlitchedFace.webp';
+    }
+}
+
+function unlockFace(faceId) {
+    if (!ownedFaces.includes(faceId)) {
+        ownedFaces.push(faceId);
+        localStorage.setItem('rogold_owned_faces', JSON.stringify(ownedFaces));
+        updateFaceSelector();
+    }
+}
+

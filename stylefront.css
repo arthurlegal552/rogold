@@ -1088,65 +1088,9 @@ dialog::backdrop {
 }
 
 .catalog-content {
-    display: grid;
-    grid-template-columns: 180px 1fr; /* Smaller avatar preview, larger items area (removed 3D viewer) */
-    gap: 20px;
+    /* Removed grid layout since avatar preview is gone */
 }
 
-/* Avatar Preview */
-.avatar-preview-container {
-    background: linear-gradient(to bottom, #f0f0f0, #e8e8e8);
-    border: 2px solid #000;
-    padding: 15px;
-    box-shadow: 
-        inset 1px 1px 0 #fff,
-        inset -1px -1px 0 #808080,
-        2px 2px 0 rgba(0, 0, 0, 0.2);
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-.avatar-preview-container h3 {
-    font-size: 14px;
-    margin-bottom: 10px;
-    color: #000;
-    text-shadow: 1px 1px 0 #fff;
-    border-bottom: 1px solid #c0c0c0;
-    padding-bottom: 5px;
-    width: 100%; /* Make line stretch */
-}
-
-/* Avatar display is now a container for a Three.js canvas */
-.avatar-display {
-    position: relative;
-    width: 100%; /* Fill container */
-    height: 180px; /* Adjust aspect ratio as needed for your base avatar */
-    border: 2px solid #000;
-    background-color: #add8e6; /* Light blue background for avatar area */
-    overflow: hidden; /* Hide anything outside bounds */
-    display: flex; /* For centering canvas */
-    justify-content: center;
-    align-items: center;
-    box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #fff;
-}
-
-.avatar-display canvas { /* Style the canvas directly */
-    display: block;
-    width: 100%;
-    height: 100%;
-}
-
-.viewer-placeholder {
-    font-size: 10px;
-    color: #606060;
-    text-align: center;
-    padding: 10px;
-    position: absolute; /* Position over canvas if needed */
-    width: 100%;
-    pointer-events: none; /* Allow clicks to pass through to canvas */
-}
 
 /* Catalog Items */
 .catalog-items {
@@ -1377,4 +1321,459 @@ dialog::backdrop {
     top: 10px;
     left: 10px;
     z-index: 10;
+}
+
+/* Game Studio Styles */
+#create-games-section {
+    background: linear-gradient(to bottom, #e8e8e8, #c0c0c0);
+    border: 2px solid #000;
+    padding: 20px;
+    box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #808080;
+    position: relative;
+}
+
+.game-studio-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: linear-gradient(to bottom, #f0f0f0, #d8d8d8);
+    border: 2px solid #000;
+    box-shadow:
+        inset 1px 1px 0 #fff,
+        inset -1px -1px 0 #808080;
+}
+
+.game-studio-header h2 {
+    font-size: 20px;
+    color: #000;
+    text-shadow: 1px 1px 0 #fff;
+}
+
+.studio-tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #000;
+}
+
+.studio-tab-button {
+    background: linear-gradient(to bottom, #e8e8e8, #c0c0c0);
+    border: 2px solid #000;
+    padding: 8px 15px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #808080;
+}
+
+.studio-tab-button.active {
+    background: linear-gradient(to bottom, #ff6600, #ff3300);
+    color: #fff;
+    text-shadow: 1px 1px 0 #000;
+}
+
+.studio-tab-button:hover:not(.active) {
+    background: linear-gradient(to bottom, #808080, #606060);
+    color: #fff;
+}
+
+.studio-tab-content {
+    background: linear-gradient(to bottom, #f0f0f0, #e8e8e8);
+    border: 2px solid #000;
+    padding: 20px;
+    box-shadow:
+        inset 1px 1px 0 #fff,
+        inset -1px -1px 0 #808080,
+        2px 2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.studio-tab-panel {
+    display: none;
+}
+
+.studio-tab-panel.active {
+    display: block;
+}
+
+.create-game-form h3 {
+    font-size: 16px;
+    margin-bottom: 15px;
+    color: #000;
+    text-shadow: 1px 1px 0 #fff;
+    border-bottom: 2px solid #808080;
+    padding-bottom: 5px;
+}
+
+.thumbnail-preview {
+    width: 120px;
+    height: 90px;
+    background: linear-gradient(135deg, #a0a0a0, #808080);
+    border: 2px solid #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 10px;
+    font-size: 10px;
+    color: #606060;
+    text-align: center;
+    box-shadow: inset 1px 1px 0 #c0c0c0, inset -1px -1px 0 #606060;
+}
+
+.thumbnail-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    image-rendering: pixelated;
+}
+
+.games-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.game-card-published {
+    background: linear-gradient(to bottom, #e8e8e8, #c0c0c0);
+    border: 2px solid #000;
+    padding: 12px;
+    box-shadow:
+        inset 1px 1px 0 #fff,
+        inset -1px -1px 0 #808080,
+        2px 2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.game-card-published h4 {
+    font-size: 14px;
+    margin-bottom: 8px;
+    color: #000;
+    font-weight: bold;
+}
+
+.game-card-published p {
+    font-size: 11px;
+    color: #404040;
+    margin-bottom: 8px;
+    line-height: 1.3;
+}
+
+.game-meta {
+    font-size: 10px;
+    color: #606060;
+    margin-bottom: 10px;
+}
+
+.game-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.edit-game-button, .play-game-button {
+    background: linear-gradient(to bottom, #0000ff, #000080);
+    color: #fff;
+    border: 2px solid #000;
+    padding: 6px 12px;
+    font-size: 11px;
+    cursor: pointer;
+    box-shadow: inset 1px 1px 0 #4169e1, inset -1px -1px 0 #000040;
+}
+
+.edit-game-button:hover {
+    background: linear-gradient(to bottom, #000080, #000040);
+}
+
+.play-game-button {
+    background: linear-gradient(to bottom, #00ff00, #008000);
+    color: #000;
+    box-shadow: inset 1px 1px 0 #90ee90, inset -1px -1px 0 #004000;
+}
+
+.play-game-button:hover {
+    background: linear-gradient(to bottom, #008000, #004000);
+    color: #fff;
+}
+
+.game-rating {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.like-button, .dislike-button {
+    background: linear-gradient(to bottom, #e8e8e8, #c0c0c0);
+    border: 2px solid #000;
+    padding: 4px 8px;
+    font-size: 10px;
+    cursor: pointer;
+    box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #808080;
+}
+
+.like-button:hover {
+    background: linear-gradient(to bottom, #00ff00, #008000);
+    color: #000;
+}
+
+.dislike-button:hover {
+    background: linear-gradient(to bottom, #ff3300, #cc0000);
+    color: #fff;
+}
+
+.like-button.liked {
+    background: linear-gradient(to bottom, #00ff00, #008000);
+    color: #000;
+}
+
+.dislike-button.disliked {
+    background: linear-gradient(to bottom, #ff3300, #cc0000);
+    color: #fff;
+}
+
+.rating-count {
+    font-size: 10px;
+    color: #000;
+    font-weight: bold;
+}
+
+.browse-filters {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    align-items: center;
+}
+
+.browse-filters select,
+.browse-filters input {
+    padding: 6px;
+    border: 2px solid #000;
+    background-color: #fff;
+    font-family: 'MS Sans Serif', Arial, sans-serif;
+    font-size: 12px;
+    box-shadow: inset 1px 1px 0 #808080;
+}
+
+/* Game Editor Styles */
+#game-editor-section {
+    background: linear-gradient(to bottom, #e8e8e8, #c0c0c0);
+    border: 2px solid #000;
+    padding: 20px;
+    box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #808080;
+    position: relative;
+    height: calc(100vh - 100px);
+    overflow: hidden;
+}
+
+.editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 10px;
+    background: linear-gradient(to bottom, #f0f0f0, #d8d8d8);
+    border: 2px solid #000;
+    box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #808080;
+}
+
+.editor-header h2 {
+    font-size: 18px;
+    color: #000;
+    text-shadow: 1px 1px 0 #fff;
+}
+
+.editor-actions {
+    display: flex;
+    gap: 10px;
+}
+
+#save-game-button, #test-play-button {
+    background: linear-gradient(to bottom, #00ff00, #008000);
+    color: #000;
+    border: 2px solid #000;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: inset 1px 1px 0 #90ee90, inset -1px -1px 0 #004000;
+}
+
+#save-game-button:hover, #test-play-button:hover {
+    background: linear-gradient(to bottom, #008000, #004000);
+    color: #fff;
+}
+
+.editor-layout {
+    display: flex;
+    height: calc(100% - 60px);
+    gap: 15px;
+}
+
+.editor-toolbar {
+    width: 250px;
+    background: linear-gradient(to bottom, #f0f0f0, #e8e8e8);
+    border: 2px solid #000;
+    padding: 15px;
+    box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #808080;
+    overflow-y: auto;
+}
+
+.tool-section {
+    margin-bottom: 20px;
+}
+
+.tool-section h4 {
+    font-size: 14px;
+    margin-bottom: 10px;
+    color: #000;
+    text-shadow: 1px 1px 0 #fff;
+    border-bottom: 1px solid #c0c0c0;
+    padding-bottom: 3px;
+}
+
+.tool-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.object-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.light-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.tool-button, .object-button, .light-button {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(to bottom, #e8e8e8, #c0c0c0);
+    border: 2px solid #000;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #808080;
+}
+
+.tool-button.active {
+    background: linear-gradient(to bottom, #0000ff, #000080);
+    color: #fff;
+    box-shadow: inset 1px 1px 0 #4169e1, inset -1px -1px 0 #000040;
+}
+
+.tool-button:hover:not(.active), .object-button:hover, .light-button:hover {
+    background: linear-gradient(to bottom, #808080, #606060);
+    color: #fff;
+}
+
+.properties-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.property-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.property-group label {
+    font-size: 11px;
+    min-width: 60px;
+    color: #000;
+}
+
+.property-group input {
+    width: 80px;
+    padding: 3px;
+    border: 1px solid #000;
+    background: #fff;
+    font-size: 11px;
+    box-shadow: inset 1px 1px 0 #808080;
+}
+
+.editor-viewport {
+    flex: 1;
+    background: #000;
+    border: 2px solid #000;
+    position: relative;
+    box-shadow: inset 1px 1px 0 #404040, inset -1px -1px 0 #c0c0c0;
+}
+
+#editor-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.viewport-overlay {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 5px 10px;
+    font-size: 11px;
+    border-radius: 0;
+    font-family: 'MS Sans Serif', Arial, sans-serif;
+}
+
+.viewport-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* Game Player Styles */
+#game-player-section {
+    background: #000;
+    border: 2px solid #000;
+    padding: 20px;
+    box-shadow: inset 1px 1px 0 #404040, inset -1px -1px 0 #c0c0c0;
+    position: relative;
+    height: calc(100vh - 100px);
+}
+
+.player-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 10px;
+    background: linear-gradient(to bottom, #f0f0f0, #d8d8d8);
+    border: 2px solid #000;
+    box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #808080;
+}
+
+.player-header h2 {
+    font-size: 18px;
+    color: #000;
+    text-shadow: 1px 1px 0 #fff;
+}
+
+.player-viewport {
+    width: 100%;
+    height: calc(100% - 60px);
+    background: #000;
+    border: 2px solid #000;
+    box-shadow: inset 1px 1px 0 #404040, inset -1px -1px 0 #c0c0c0;
+}
+
+#player-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
 }

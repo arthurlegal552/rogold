@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ROGOLD</title>
+    <link rel="icon" href="logo.png" type="image/png">
     <link rel="stylesheet" href="styles.css">
     <style>
     .bubble-chat {
@@ -17,7 +18,8 @@
         "imports": {
             "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
             "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/",
-            "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
+            "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js",
+            "fengari": "https://unpkg.com/fengari-web@0.1.4/dist/fengari-web.js"
         }
     }
     </script>
@@ -65,6 +67,17 @@
                 <div class="potion-option active" data-sound="classic">Classic Oof</div>
                 <div class="potion-option" data-sound="ouch">Ouch</div>
             </div>
+            <div class="options-customizer" id="options-customizer">
+                <h3>Options</h3>
+                <div class="option-item">
+                    <label for="mute-toggle">Mute Audio</label>
+                    <input type="checkbox" id="mute-toggle">
+                </div>
+                <div class="option-item">
+                    <label for="pixelated-toggle">Pixelated Effect</label>
+                    <input type="checkbox" id="pixelated-toggle">
+                </div>
+            </div>
              <div class="status-indicator">
                 <span id="online-status">Connecting...</span>
             </div>
@@ -97,7 +110,7 @@
     </div>
     <ul id="player-list"></ul>
 </div>
-
+<div id="gui-container"></div>
 
     <!-- Menu Button -->
     <button id="menu-btn" class="retro-btn">☰ Menu</button>
@@ -115,10 +128,40 @@
     <div id="game-menu" class="retro-menu">
         <h2>Game Menu</h2>
         <button id="resume-btn" class="retro-btn">Resume</button>
+        <button id="help-btn" class="retro-btn">Help</button>
         <button id="options-btn" class="retro-btn">Options</button>
         <form action="index.html">
             <button id="exit-btn" class="retro-btn">Exit</button>
         </form>
+    </div>
+
+    <!-- Options Menu -->
+    <div id="options-menu" class="retro-menu">
+        <h2>Options</h2>
+        <div class="option-item">
+            <label for="options-mute-toggle">Mute Game Audio:</label>
+            <input type="checkbox" id="options-mute-toggle">
+        </div>
+        <div class="option-item">
+            <label for="options-pixelated-toggle">Pixelated Effect:</label>
+            <input type="checkbox" id="options-pixelated-toggle" checked>
+        </div>
+        <button id="back-to-menu-btn" class="retro-btn">Back</button>
+    </div>
+    <!-- Tutorial Overlay -->
+    <div id="help-tutorial" class="retro-menu">
+        <h2>Game Controls Tutorial</h2>
+        <h3>Movement</h3>
+        <p>Use WASD keys to move your character.</p>
+        <h3>Jump</h3>
+        <p>Press Spacebar to jump.</p>
+        <h3>Camera Movement</h3>
+        <p>Move the mouse to rotate the camera.</p>
+        <h3>Zoom In</h3>
+        <p>Scroll mouse wheel up to zoom in.</p>
+        <h3>Zoom Out</h3>
+        <p>Scroll mouse wheel down to zoom out.</p>
+        <button id="close-tutorial-btn" class="retro-btn">Close</button>
     </div>
 
     <button id="equip-tool-btn" class="toolbox" style="margin-top:10px;"><img src="launcher.jpg" alt="launcher"></button>

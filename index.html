@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rogold - O mundo dos jogos!</title>
+    <link rel="icon" href="logo.png" type="image/png">
     <link rel="stylesheet" href="stylefront.css">
     <script type="importmap">
         {
@@ -24,6 +25,7 @@
                     <li><a href="#" id="home-link" class="active">Home</a></li>
                     <li><a href="#" id="games-link">Jogos</a></li>
                     <li><a href="#" id="catalog-link">Catálogo</a></li>
+                    <li><a href="#" id="studio-link">Studio</a></li>
                     <li><a href="#" id="profile-link">Perfil</a></li>
                     <li><a href="#" id="community-link">Comunidade</a></li>
                 </ul>
@@ -143,46 +145,6 @@
                 </div>
             </section>
 
-            <!-- NEW: Catalog Section -->
-            <section id="catalog-section" class="hidden">
-                <div class="catalog-header">
-                    <button class="back-button" onclick="hideCatalog()">← Voltar</button>
-                    <h2>Catálogo Rogold</h2>
-                    <div class="user-roblox-account-info">
-                        <img src="roglux_coins.png" alt="Coins" class="coins-icon">
-                        <span id="current-catalog-coins">0</span>
-                    </div>
-                </div>
-
-                <div class="catalog-content">
-                    <div class="avatar-preview-container">
-                        <h3>Meu Personagem 3D</h3>
-                        <div class="avatar-display" id="avatar-preview-display">
-                            <!-- Three.js canvas for avatar preview will be appended here -->
-                        </div>
-                    </div>
-
-                    <div class="catalog-items">
-                        <div class="catalog-categories">
-                            <button class="category-button active" data-category="all">Todos</button>
-                            <button class="category-button" data-category="hat">Chapéus</button>
-                            <button class="category-button" data-category="face">Rostos</button>
-                        </div>
-                        <div class="items-grid" id="catalog-items-grid" style="display: block;">
-                            <div class="catalog-item" data-category="face" data-item="default-face" style="display: block; border: 1px solid black; padding: 10px;">
-                                <h4>Default Face</h4>
-                                <p>Free</p>
-                                <button class="buy-button" data-item="default-face">Equip</button>
-                            </div>
-                            <div class="catalog-item" data-category="face" data-item="epic-face" style="display: block; border: 1px solid black; padding: 10px;">
-                                <h4>Epic Face</h4>
-                                <p>100 Coins</p>
-                                <button class="buy-button" data-item="epic-face">Buy</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
 
             <!-- Add Community Section -->
             <section id="community-section" class="hidden">
@@ -245,15 +207,41 @@
                 </div>
             </section>
 
+
+            <!-- Catalog Section -->
+            <section id="catalog-section" class="hidden">
+                <div class="catalog-header">
+                    <button class="back-button" onclick="hideCatalog()">← Voltar</button>
+                    <h2>Catálogo Rogold</h2>
+                    <div class="user-roblox-account-info">
+                        <img src="roglux_coins.png" alt="Coins" class="coins-icon">
+                        <span id="current-catalog-coins">0</span>
+                    </div>
+                </div>
+
+                <div class="catalog-content">
+                    <div class="catalog-items">
+                        <div class="catalog-categories">
+                            <button class="category-button active" data-category="all">Todos</button>
+                            <button class="category-button" data-category="hat">Chapéus</button>
+                            <button class="category-button" data-category="face">Rostos</button>
+                        </div>
+                        <div class="items-grid" id="catalog-items-grid">
+                            <!-- Items will be rendered here by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <section class="featured-games" id="featured-games">
                 <h3>Jogos em Destaque</h3>
-                <div class="games-grid">
+                <div class="games-grid" id="games-grid">
                     <div class="game-card" data-game-title="Natural Disaster Survival">
                         <div class="game-thumbnail">
                             <img src="thumbnail1.jpg" alt="Natural Disaster Survival Thumbnail">
                         </div>
                         <h4>Natural Disaster Survival</h4>
-                        <button class="play-button">Jogar</button>
+                        <button class="play-button" data-game-id="natural_disaster_survival">Jogar</button>
                         <button class="favorite-toggle-button">Favoritar</button>
                     </div>
                     <div class="game-card" data-game-title="Work at a Pizza Place">
@@ -261,9 +249,10 @@
                             <img src="thumbnail2.jpg" alt="Work at a Pizza Place Thumbnail">
                         </div>
                         <h4>Work at a Pizza Place</h4>
-                        <button class="play-button">Jogar</button>
+                        <button class="play-button" data-game-id="work_at_pizza_place">Jogar</button>
                         <button class="favorite-toggle-button">Favoritar</button>
                     </div>
+                    <!-- Published games will be added here dynamically -->
                 </div>
             </section>
 
@@ -390,26 +379,8 @@
     <!-- Link to external JavaScript file -->
     <script type="module" src="index.js"></script>
     <script>
-        // Navigation
+        // Buy functionality
         document.addEventListener('DOMContentLoaded', () => {
-            const links = document.querySelectorAll('nav ul li a');
-            links.forEach(link => {
-                link.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    document.querySelectorAll('nav ul li a').forEach(l => l.classList.remove('active'));
-                    link.classList.add('active');
-                    const id = link.id.replace('-link', '-section');
-                    document.querySelectorAll('main > section').forEach(section => {
-                        section.classList.add('hidden');
-                    });
-                    document.getElementById(id).classList.remove('hidden');
-                    // If catalog, add category listeners
-                    if (id === 'catalog-section') {
-                        addCategoryListeners();
-                    }
-            });
-
-            // Buy functionality
             const buyButtons = document.querySelectorAll('.buy-button');
             buyButtons.forEach(button => {
                 button.addEventListener('click', (e) => {
@@ -435,16 +406,37 @@
             });
         });
 
-        function addCategoryListeners() {
-            const categoryButtons = document.querySelectorAll('.category-button');
-            categoryButtons.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    categoryButtons.forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    // No filtering needed since all items are faces
-                });
-            });
-        }
+        // Navigation
+        document.addEventListener('DOMContentLoaded', () => {
+            const links = document.querySelectorAll('nav ul li a');
+            links.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    document.querySelectorAll('nav ul li a').forEach(l => l.classList.remove('active'));
+                    link.classList.add('active');
+                    const id = link.id.replace('-link', '-section');
+                    const targetSection = document.getElementById(id);
+                    if (!targetSection) return; // Section doesn't exist on this page
+                    document.querySelectorAll('main > section').forEach(section => {
+                        section.classList.add('hidden');
+                    });
+                    targetSection.classList.remove('hidden');
+
+                    // If catalog, add category listeners
+                    if (id === 'catalog-section') {
+                        const categoryButtons = document.querySelectorAll('.category-button');
+                        categoryButtons.forEach(btn => {
+                            btn.addEventListener('click', () => {
+                                categoryButtons.forEach(b => b.classList.remove('active'));
+                                btn.classList.add('active');
+                                // No filtering needed since all items are faces
+                            });
+                        });
+                    }
+                    });
+
+        });
+
         });
     </script>
 </body>

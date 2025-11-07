@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RoGold Studio - Roblox Game Development</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="stylefront.css">
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/",
+        "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js",
+        "fengari": "https://unpkg.com/fengari-web@0.1.4/dist/fengari-web.js"
+      }
+    }
+    </script>
+    <style>
+        /* Studio-specific styles */
+        .studio-container {
+            width: 100vw;
+            height: 100vh;
+            background: #c0c0c0;
+            display: flex;
+            flex-direction: column;
+            font-family: Tahoma, sans-serif;
+            overflow: hidden;
+        }
+
+        /* Studio-specific styles */
+        .studio-container {
+            width: 100vw;
+            height: 100vh;
+            background: #c0c0c0;
+            display: flex;
+            flex-direction: column;
+            font-family: Tahoma, sans-serif;
+            overflow: hidden;
+        }
+
+        .studio-header {
+            background: #ece9d8;
+            border-bottom: 2px inset #c0c0c0;
+            padding: 2px 4px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .studio-title {
+            color: #000000;
+            font-family: Tahoma, sans-serif;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .studio-toolbar {
+            display: flex;
+            gap: 8px;
+        }
+
+        .studio-btn {
+            background: #ece9d8;
+            border: 1px outset #c0c0c0;
+            color: #000000;
+            padding: 2px 8px;
+            font-family: Tahoma, sans-serif;
+            font-size: 11px;
+            cursor: pointer;
+            margin: 0 1px;
+        }
+
+        .studio-btn:active {
+            border: 1px inset #c0c0c0;
+        }
+
+        .studio-workspace {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .studio-sidebar {
+            width: 200px;
+            background: #ece9d8;
+            border-right: 2px inset #c0c0c0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-section {
+            border-bottom: 1px inset #c0c0c0;
+            padding: 4px;
+            overflow: hidden;
+        }
+
+        .sidebar-title {
+            color: #000000;
+            font-family: Tahoma, sans-serif;
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .toolbox-item {
+            background: #ece9d8;
+            border: 1px outset #c0c0c0;
+            color: #000000;
+            padding: 2px 4px;
+            margin-bottom: 2px;
+            font-family: Tahoma, sans-serif;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .toolbox-item:active {
+            border: 1px inset #c0c0c0;
+        }
+
+        .toolbox-item.selected {
+            background: #316ac5;
+            color: #ffffff;
+            border: 1px inset #c0c0c0;
+        }
+
+        .workspace-item {
+            color: #000000;
+            padding: 1px 4px;
+            margin-bottom: 1px;
+            font-family: Tahoma, sans-serif;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .workspace-item:hover {
+            background: #c0c0c0;
+        }
+
+        .workspace-item.selected {
+            background: #316ac5;
+            color: #ffffff;
+        }
+
+        .workspace-folder {
+            font-weight: bold;
+        }
+
+        .workspace-children {
+            margin-left: 16px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+
+        .workspace-object {
+            padding-left: 12px;
+        }
+
+        .workspace-object.part::before {
+            content: "Part ";
+        }
+
+        .workspace-object.light::before {
+            content: "Light ";
+        }
+
+        .workspace-object.sound::before {
+            content: "Sound ";
+        }
+
+        .workspace-object.model::before {
+            content: "Model ";
+        }
+
+        .workspace-object.script::before {
+            content: "Script ";
+        }
+
+        .studio-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .studio-tabs {
+            background: #ece9d8;
+            border-bottom: 1px inset #c0c0c0;
+            display: flex;
+            height: 24px;
+        }
+
+        .tab {
+            background: #ece9d8;
+            border: 1px solid #c0c0c0;
+            border-bottom: none;
+            color: #000000;
+            padding: 2px 8px;
+            font-family: Tahoma, sans-serif;
+            font-size: 11px;
+            cursor: pointer;
+            margin-right: 2px;
+        }
+
+        .tab.active {
+            background: #ffffff;
+            border: 1px inset #c0c0c0;
+            border-bottom: 1px solid #ffffff;
+            padding-top: 3px;
+        }
+
+        .studio-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .code-editor {
+            flex: 1;
+            background: #ffffff;
+            border: 1px inset #c0c0c0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .code-editor.hidden {
+            display: none !important;
+        }
+
+        .code-editor-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #ffffff;
+            border: 1px inset #c0c0c0;
+            position: relative;
+            min-height: 400px;
+        }
+
+        .output-panel {
+            height: 120px;
+            background: #ffffff;
+            border-top: 1px inset #c0c0c0;
+            padding: 2px 4px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            font-family: 'Courier New', monospace;
+            font-size: 10pt;
+            color: #000000;
+        }
+
+        .output-line {
+            margin-bottom: 2px;
+        }
+
+        .output-error {
+            color: #FF0000;
+        }
+
+        .output-success {
+            color: #008000;
+        }
+
+        /* 3D Viewport */
+        .viewport-3d {
+            flex: 1;
+            background: #c0c0c0;
+            position: relative;
+            width: 100%;
+            height: 100%;
+            border: 1px inset #c0c0c0;
+        }
+
+        .viewport-canvas {
+            width: 100% !important;
+            height: 100% !important;
+            display: block;
+        }
+
+        /* Windows 95 style effects */
+        .inset-border {
+            border: 1px inset #c0c0c0;
+        }
+
+        .outset-border {
+            border: 1px outset #c0c0c0;
+        }
+
+        /* Hide/show panels */
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="studio-container">
+        <!-- Header -->
+        <div class="studio-header">
+            <div class="studio-title">RoGold Studio</div>
+            <div class="studio-toolbar">
+                <button class="studio-btn" id="play-btn">Play</button>
+                <button class="studio-btn" id="stop-btn">Stop</button>
+                <button class="studio-btn" id="delete-btn">Delete</button>
+                <button class="studio-btn" id="test-btn">Test</button>
+                <button class="studio-btn" id="publish-btn">Publish</button>
+                <button class="studio-btn" id="save-btn">Save</button>
+                <button class="studio-btn" id="load-btn">Load</button>
+                <button class="studio-btn" id="back-btn">Back to Game</button>
+            </div>
+        </div>
+
+        <!-- Main Workspace -->
+        <div class="studio-workspace">
+            <!-- Left Sidebar -->
+            <div class="studio-sidebar">
+                <!-- Toolbox -->
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Toolbox</div>
+                    <div class="toolbox-item" data-type="select">Select</div>
+                    <div class="toolbox-item" data-type="move">Move</div>
+                    <div class="toolbox-item" data-type="rotate">Rotate</div>
+                    <div class="toolbox-item" data-type="scale">Scale</div>
+                    <div class="toolbox-item" data-type="part">Part</div>
+                    <div class="toolbox-item" data-type="sound">Sound</div>
+                    <div class="toolbox-item" data-type="light">Light</div>
+                    <div class="toolbox-item" data-type="model">Model</div>
+                    <div class="toolbox-item" data-type="script">Script</div>
+                    <div style="color: #cccccc; font-size: 10px; margin-top: 4px; font-family: Tahoma, sans-serif;">
+                        <b>Keyboard:</b> Q=Select W=Move R=Rotate E=Scale T=Part<br>
+                        Select: Click parts to select<br>
+                        Move: Drag colored arrows (Red=X, Green=Y, Blue=Z)<br>
+                        Rotate: Drag colored rings for rotation<br>
+                        Scale: Drag colored circles for precise control<br>
+                        Place tools: Click in viewport to place!
+                    </div>
+                </div>
+
+                <!-- Explorer -->
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Explorer</div>
+                    <div id="workspace-tree">
+                        <div class="workspace-item workspace-folder" data-path="Workspace" data-expanded="true">
+                            Workspace
+                            <div class="workspace-children" id="workspace-children">
+                                <!-- Objects will be added here dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Properties -->
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Properties</div>
+                    <div id="properties-content" style="font-family: Tahoma, sans-serif; font-size: 11px;">
+                        <div style="margin-bottom: 4px;">
+                            <label>Name:</label>
+                            <input type="text" id="prop-name" style="width: 100px;">
+                        </div>
+                        <div style="margin-bottom: 4px;">
+                            <label>Position:</label><br>
+                            X: <input type="number" id="prop-pos-x" style="width: 50px;">
+                            Y: <input type="number" id="prop-pos-y" style="width: 50px;">
+                            Z: <input type="number" id="prop-pos-z" style="width: 50px;">
+                        </div>
+                        <div style="margin-bottom: 4px;">
+                            <input type="checkbox" id="prop-anchored">
+                            <label for="prop-anchored">Anchored</label>
+                        </div>
+                        <div style="margin-bottom: 4px;">
+                            <input type="checkbox" id="prop-can-collide">
+                            <label for="prop-can-collide">Can Collide</label>
+                        </div>
+                        <div style="margin-bottom: 4px;">
+                            <label>Body Type:</label>
+                            <select id="prop-body-type" style="width: 100px;">
+                                <option value="dynamic">Dynamic</option>
+                                <option value="kinematic">Kinematic</option>
+                                <option value="static">Static</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom: 4px;">
+                            <label>Mass:</label>
+                            <input type="number" id="prop-mass" step="0.1" min="0" style="width: 60px;">
+                        </div>
+                        <div style="margin-bottom: 4px;">
+                            <label>Friction:</label>
+                            <input type="number" id="prop-friction" step="0.01" min="0" max="1" style="width: 60px;">
+                        </div>
+                        <div style="margin-bottom: 4px;">
+                            <label>Restitution:</label>
+                            <input type="number" id="prop-restitution" step="0.01" min="0" max="1" style="width: 60px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="studio-main">
+                <!-- Tabs -->
+                <div class="studio-tabs" id="studio-tabs">
+                    <div class="tab active" data-tab="viewport">Viewport</div>
+                    <div class="tab" data-tab="script">Script</div>
+                </div>
+
+                <!-- Tab Content -->
+                <div class="studio-content">
+                    <!-- 3D Viewport -->
+                    <div class="viewport-3d" id="viewport-tab">
+                        <canvas id="viewport-canvas"></canvas>
+                    </div>
+
+                    <!-- Script Editor -->
+                    <div class="code-editor" id="script-tab">
+                        <div class="code-editor-container" id="main-script-editor">
+                            <!-- Monaco Editor will be initialized here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Output Panel -->
+                <div class="output-panel" id="output-panel">
+                    <div class="output-line output-success">RoGold Studio initialized successfully!</div>
+                    <div class="output-line">Ready to create amazing games...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="studio.js"></script>
+    <script>
+        // Monaco Editor Integration
+        window.monacoEditor = null;
+
+        // Initialize Monaco Editor
+        (function() {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js';
+            script.onload = function() {
+                require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+                require(['vs/editor/editor.main'], function() {
+                    // Register Lua language
+                    monaco.languages.register({ id: 'lua' });
+
+                    // Define Lua language syntax
+                    monaco.languages.setMonarchTokensProvider('lua', {
+                        tokenizer: {
+                            root: [
+                                // Comments
+                                [/--.*$/, 'comment'],
+
+                                // Strings
+                                [/"([^"\\]|\\.)*$/, 'string.invalid'],
+                                [/"([^"\\]|\\.)*"/, 'string'],
+                                [/'([^'\\]|\\.)*$/, 'string.invalid'],
+                                [/'([^'\\]|\\.)*'/, 'string'],
+
+                                // Numbers
+                                [/\d*\.\d+([eE][\-+]?\d+)?/, 'number.float'],
+                                [/\d+/, 'number'],
+
+                                // Keywords
+                                [/\b(local|function|end|if|then|else|elseif|for|while|do|repeat|until|return|break|in|and|or|not|true|false|nil)\b/, 'keyword'],
+
+                                // Roblox API
+                                [/\b(Instance|new|Vector3|Color3|CFrame|workspace|game|script|print|wait|spawn|delay|tick|time|os|math|string|table)\b/, 'keyword.control'],
+
+                                // Operators
+                                [/[\+\-\*\/%=<>!]=?/, 'operator'],
+
+                                // Brackets
+                                [/[{}()\[\]]/, 'delimiter']
+                            ]
+                        }
+                    });
+
+                    // Create Monaco Editor
+                    window.monacoEditor = monaco.editor.create(document.getElementById('main-script-editor'), {
+                        value: `-- Welcome to RoGold Studio Script Editor!
+-- Write your Lua code here
+
+print("Hello from RoGold Studio!")
+
+-- Example: Create a simple GUI with Frame, TextLabel, and TextButton
+
+-- Create a ScreenGui to hold our GUI elements
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ExampleGUI"
+screenGui.Parent = game.Players.LocalPlayer.PlayerGui
+
+-- Create a Frame as the main container
+local frame = Instance.new("Frame")
+frame.Name = "MainFrame"
+frame.Size = UDim2.new(0, 300, 0, 200)
+frame.Position = UDim2.new(0.5, -150, 0.5, -100)
+frame.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+frame.BackgroundTransparency = 0.1
+frame.BorderSizePixel = 2
+frame.Parent = screenGui
+
+-- Create a TextLabel to display text
+local textLabel = Instance.new("TextLabel")
+textLabel.Name = "TitleLabel"
+textLabel.Size = UDim2.new(1, -20, 0, 50)
+textLabel.Position = UDim2.new(0, 10, 0, 10)
+textLabel.BackgroundColor3 = Color3.new(0.8, 0.8, 0.8)
+textLabel.Text = "Welcome to RoGold Studio!"
+textLabel.TextColor3 = Color3.new(0, 0, 0)
+textLabel.TextSize = 18
+textLabel.Font = Enum.Font.SourceSansBold
+textLabel.Parent = frame
+
+-- Create a TextButton that can be clicked
+local textButton = Instance.new("TextButton")
+textButton.Name = "ClickButton"
+textButton.Size = UDim2.new(0, 150, 0, 40)
+textButton.Position = UDim2.new(0.5, -75, 1, -60)
+textButton.BackgroundColor3 = Color3.new(0.4, 0.6, 1)
+textButton.Text = "Click Me!"
+textButton.TextColor3 = Color3.new(1, 1, 1)
+textButton.TextSize = 16
+textButton.Font = Enum.Font.SourceSans
+textButton.Parent = frame
+
+-- Connect an event to the button
+textButton.MouseButton1Click:Connect(function()
+   print("Button was clicked!")
+   textLabel.Text = "Button Clicked!"
+   textLabel.TextColor3 = Color3.new(0, 1, 0)
+   wait(2)
+   textLabel.Text = "Welcome to RoGold Studio!"
+   textLabel.TextColor3 = Color3.new(0, 0, 0)
+end)
+
+print("GUI created successfully!")
+`,
+                        language: 'lua',
+                        theme: 'vs-dark',
+                        fontSize: 12,
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        automaticLayout: true,
+                        wordWrap: 'on',
+                        tabSize: 4,
+                        insertSpaces: true,
+                        folding: true,
+                        lineNumbers: 'on',
+                        renderWhitespace: 'selection',
+                        bracketPairColorization: { enabled: true },
+                        contextmenu: true,
+                        mouseWheelZoom: true,
+                        smoothScrolling: true,
+                        cursorBlinking: 'blink',
+                        cursorSmoothCaretAnimation: true,
+                        renderLineHighlight: 'line',
+                        selectOnLineNumbers: true,
+                        roundedSelection: false,
+                        readOnly: false,
+                        glyphMargin: false,
+                        useTabStops: false,
+                        wordSeparators: '~!@#$%^&*()-=+[{]}\\|;:\'",.<>/?',
+                        wordWrapBreakBeforeCharacters: '([{',
+                        wordWrapBreakAfterCharacters: ')]}',
+                        autoClosingBrackets: 'always',
+                        autoClosingQuotes: 'always',
+                        autoSurround: 'languageDefined',
+                        autoIndent: 'advanced',
+                        formatOnPaste: true,
+                        formatOnType: true,
+                        acceptSuggestionOnCommitCharacter: true,
+                        acceptSuggestionOnEnter: 'on',
+                        accessibilitySupport: 'auto',
+                        codeLens: false,
+                        colorDecorators: true,
+                        lightbulb: { enabled: 'on' },
+                        quickSuggestions: {
+                            other: true,
+                            comments: true,
+                            strings: true
+                        },
+                        parameterHints: { enabled: true },
+                        suggestOnTriggerCharacters: true,
+                        acceptSuggestionOnEnter: 'on',
+                        tabCompletion: 'on',
+                        wordBasedSuggestions: true,
+                        suggest: {
+                            showKeywords: true,
+                            showSnippets: true,
+                            showModules: true,
+                            showVariables: true,
+                            showFunctions: true,
+                            showConstructors: true,
+                            showFields: true,
+                            showProperties: true,
+                            showMethods: true,
+                            showEvents: true,
+                            showOperators: true,
+                            showUnits: true,
+                            showValues: true,
+                            showConstants: true,
+                            showEnums: true,
+                            showEnumMembers: true,
+                            showClasses: true,
+                            showInterfaces: true,
+                            showStructs: true,
+                            showTypeParameters: true,
+                            showSnippets: true,
+                            showColors: true,
+                            showFiles: true,
+                            showReferences: true,
+                            showFolders: true,
+                            showTypeParameters: true,
+                            showIssues: true,
+                            showUsers: true,
+                            showSnippets: true,
+                            filterGraceful: true,
+                            localityBonus: true,
+                            shareSuggestSelections: true,
+                            showDeprecated: true,
+                            matchOnDescription: true,
+                            matchOnDetail: true,
+                            matchOnLabel: true,
+                            insertMode: 'insert',
+                            overwriteBefore: 3,
+                            overwriteAfter: 3,
+                            insertHighlight: true,
+                            preview: true,
+                            showInlineDetails: true,
+                            showStatusBar: true
+                        }
+                    });
+
+                    // Handle editor changes
+                    window.monacoEditor.onDidChangeModelContent(function() {
+                        // Update any connected script objects
+                        const value = window.monacoEditor.getValue();
+                        // This will be connected to the script execution system
+                    });
+
+                    console.log('Monaco Editor initialized successfully');
+                });
+            };
+            document.head.appendChild(script);
+        })();
+
+        // Enhanced Code Editor Class (for backward compatibility)
+        class RobloxCodeEditor {
+            constructor(container, scriptObj = null) {
+                this.container = container;
+                this.scriptObj = scriptObj;
+                this.isFindReplaceVisible = false;
+                this.findText = '';
+                this.replaceText = '';
+                this.currentFindIndex = -1;
+                this.findMatches = [];
+                this.bracketPairs = [];
+                this.foldedRanges = new Set();
+
+                this.init();
+            }
+
+            init() {
+                this.createToolbar();
+                this.createFindReplacePanel();
+                this.createEditorContent();
+                this.setupEventListeners();
+                this.updateSyntaxHighlighting();
+            }
+
+            createToolbar() {
+                const toolbar = document.createElement('div');
+                toolbar.className = 'code-editor-toolbar';
+
+                const buttons = [
+                    { text: 'Find', action: () => this.toggleFindReplace() },
+                    { text: 'Fold All', action: () => this.foldAll() },
+                    { text: 'Unfold All', action: () => this.unfoldAll() },
+                    { text: 'Format', action: () => this.formatCode() }
+                ];
+
+                buttons.forEach(btn => {
+                    const button = document.createElement('button');
+                    button.className = 'studio-btn';
+                    button.textContent = btn.text;
+                    button.onclick = btn.action;
+                    toolbar.appendChild(button);
+                });
+
+                this.container.appendChild(toolbar);
+                this.toolbar = toolbar;
+            }
+
+            createFindReplacePanel() {
+                const panel = document.createElement('div');
+                panel.className = 'find-replace-panel';
+
+                const findInput = document.createElement('input');
+                findInput.type = 'text';
+                findInput.placeholder = 'Find...';
+                findInput.oninput = (e) => {
+                    this.findText = e.target.value;
+                    this.findMatches = this.findAllMatches(this.findText);
+                    this.highlightFindMatches();
+                };
+
+                const replaceInput = document.createElement('input');
+                replaceInput.type = 'text';
+                replaceInput.placeholder = 'Replace...';
+                replaceInput.oninput = (e) => this.replaceText = e.target.value;
+
+                const replaceBtn = document.createElement('button');
+                replaceBtn.className = 'studio-btn';
+                replaceBtn.textContent = 'Replace';
+                replaceBtn.onclick = () => this.replaceNext();
+
+                const replaceAllBtn = document.createElement('button');
+                replaceAllBtn.className = 'studio-btn';
+                replaceAllBtn.textContent = 'Replace All';
+                replaceAllBtn.onclick = () => this.replaceAll();
+
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'studio-btn';
+                closeBtn.textContent = '×';
+                closeBtn.onclick = () => this.toggleFindReplace();
+
+                panel.appendChild(findInput);
+                panel.appendChild(replaceInput);
+                panel.appendChild(replaceBtn);
+                panel.appendChild(replaceAllBtn);
+                panel.appendChild(closeBtn);
+
+                this.container.appendChild(panel);
+                this.findReplacePanel = panel;
+                this.findInput = findInput;
+                this.replaceInput = replaceInput;
+            }
+
+            createEditorContent() {
+                const content = document.createElement('div');
+                content.className = 'code-editor-content';
+
+                // Line numbers
+                const lineNumbers = document.createElement('div');
+                lineNumbers.className = 'code-line-numbers';
+                lineNumbers.textContent = '1';
+
+                // Text area
+                const textarea = document.createElement('textarea');
+                textarea.className = 'code-textarea';
+                textarea.spellcheck = false;
+                textarea.value = this.scriptObj ? (this.scriptObj.Source || '') : '-- Write your Lua code here\n\nprint("Hello World!")';
+
+                // Highlight overlay
+                const highlightOverlay = document.createElement('div');
+                highlightOverlay.className = 'code-highlight-overlay';
+
+                content.appendChild(lineNumbers);
+                content.appendChild(textarea);
+                content.appendChild(highlightOverlay);
+
+                this.container.appendChild(content);
+                this.lineNumbers = lineNumbers;
+                this.textarea = textarea;
+                this.highlightOverlay = highlightOverlay;
+            }
+
+            setupEventListeners() {
+                // Update line numbers and syntax highlighting
+                this.textarea.addEventListener('input', () => {
+                    this.updateLineNumbers();
+                    this.updateSyntaxHighlighting();
+                    this.updateBracketMatching();
+                    if (this.scriptObj) {
+                        this.scriptObj.Source = this.textarea.value;
+                    }
+                });
+
+                // Handle scrolling
+                this.textarea.addEventListener('scroll', () => {
+                    this.lineNumbers.scrollTop = this.textarea.scrollTop;
+                    this.highlightOverlay.scrollTop = this.textarea.scrollTop;
+                    this.highlightOverlay.scrollLeft = this.textarea.scrollLeft;
+                });
+
+                // Tab handling
+                this.textarea.addEventListener('keydown', (e) => {
+                    if (e.key === 'Tab') {
+                        e.preventDefault();
+                        this.insertText('    ');
+                    }
+
+                    // Ctrl+F for find
+                    if (e.ctrlKey && e.key === 'f') {
+                        e.preventDefault();
+                        this.toggleFindReplace();
+                    }
+
+                    // Ctrl+H for replace
+                    if (e.ctrlKey && e.key === 'h') {
+                        e.preventDefault();
+                        this.toggleFindReplace();
+                    }
+
+                    // Bracket completion
+                    if (e.key === '(') this.handleBracketCompletion('(', ')');
+                    else if (e.key === '{') this.handleBracketCompletion('{', '}');
+                    else if (e.key === '[') this.handleBracketCompletion('[', ']');
+                    else if (e.key === '"' || e.key === "'") this.handleQuoteCompletion(e.key);
+                });
+
+                // Update bracket matching on cursor move
+                this.textarea.addEventListener('keyup', (e) => {
+                    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                        this.updateBracketMatching();
+                    }
+                });
+            }
+
+            updateLineNumbers() {
+                const lines = this.textarea.value.split('\n');
+                let lineNumbersText = '';
+                for (let i = 1; i <= lines.length; i++) {
+                    lineNumbersText += i + '\n';
+                }
+                this.lineNumbers.textContent = lineNumbersText;
+            }
+
+            updateSyntaxHighlighting() {
+                const code = this.textarea.value;
+                const highlighted = this.highlightLuaCode(code);
+                this.highlightOverlay.innerHTML = highlighted;
+            }
+
+    highlightLuaCode(code) {
+    // Escape HTML entities first
+    let highlighted = code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    // Lua keywords
+    const keywords = ['local', 'function', 'end', 'if', 'then', 'else', 'elseif', 'for', 'while', 'do', 'repeat', 'until', 'return', 'break', 'in', 'and', 'or', 'not', 'true', 'false', 'nil'];
+
+    // Roblox API
+    const apiWords = ['Instance', 'new', 'Vector3', 'Color3', 'CFrame', 'workspace', 'game', 'script', 'print', 'wait', 'spawn', 'delay', 'tick', 'time', 'os', 'math', 'string', 'table'];
+
+    highlighted = highlighted
+        // Comments (must be first)
+        .replace(/(--.*$)/gm, '<span class="syntax-comment">$1</span>')
+        // Strings
+        .replace(/(["'])((?:\\.|(?!\1)[^\\\n])*?)\1/g, '<span class="syntax-string">$1$2$1</span>')
+        // Numbers
+        .replace(/\b\d+(\.\d+)?\b/g, '<span class="syntax-number">$&</span>')
+        // Keywords
+        .replace(new RegExp('\\b(' + keywords.join('|') + ')\\b', 'g'), '<span class="syntax-keyword">$1</span>')
+        // API functions
+        .replace(new RegExp('\\b(' + apiWords.join('|') + ')\\b', 'g'), '<span class="syntax-function">$1</span>')
+        // Operators
+        .replace(/(\+|\-|\*|\/|==|~=|<=|>=|<|>|=|\.|\:)/g, '<span class="syntax-operator">$1</span>')
+        // Brackets
+        .replace(/(\(|\)|\[|\]|\{|\})/g, '<span class="syntax-bracket">$1</span>');
+
+    return highlighted;
+}
+
+            updateBracketMatching() {
+                const cursorPos = this.textarea.selectionStart;
+                const code = this.textarea.value;
+
+                // Clear previous highlights
+                this.textarea.style.backgroundColor = '';
+
+                // Find matching bracket
+                const bracketPairs = this.findBracketPairs(code);
+                for (const pair of bracketPairs) {
+                    if (cursorPos === pair.open || cursorPos === pair.close + 1) {
+                        // Highlight the matching bracket
+                        const start = Math.min(pair.open, pair.close);
+                        const end = Math.max(pair.open, pair.close) + 1;
+                        // For now, just ensure cursor is visible - full highlighting would need more complex implementation
+                        break;
+                    }
+                }
+            }
+
+            findBracketPairs(code) {
+                const pairs = [];
+                const stack = [];
+
+                for (let i = 0; i < code.length; i++) {
+                    const char = code[i];
+                    if (char === '(' || char === '{' || char === '[') {
+                        stack.push({ char, index: i });
+                    } else if ((char === ')' && stack.length > 0 && stack[stack.length - 1].char === '(') ||
+                               (char === '}' && stack.length > 0 && stack[stack.length - 1].char === '{') ||
+                               (char === ']' && stack.length > 0 && stack[stack.length - 1].char === '[')) {
+                        const open = stack.pop();
+                        pairs.push({ open: open.index, close: i });
+                    }
+                }
+
+                return pairs;
+            }
+
+            handleBracketCompletion(open, close) {
+                const start = this.textarea.selectionStart;
+                const end = this.textarea.selectionEnd;
+                const selectedText = this.textarea.value.substring(start, end);
+
+                if (selectedText) {
+                    // Wrap selected text
+                    this.insertText(open + selectedText + close);
+                    this.textarea.selectionStart = start + 1;
+                    this.textarea.selectionEnd = start + 1 + selectedText.length;
+                } else {
+                    // Just insert pair
+                    this.insertText(open + close);
+                    this.textarea.selectionStart = start + 1;
+                    this.textarea.selectionEnd = start + 1;
+                }
+            }
+
+            handleQuoteCompletion(quote) {
+                const start = this.textarea.selectionStart;
+                const end = this.textarea.selectionEnd;
+                const selectedText = this.textarea.value.substring(start, end);
+
+                if (selectedText) {
+                    // Wrap selected text
+                    this.insertText(quote + selectedText + quote);
+                    this.textarea.selectionStart = start + 1;
+                    this.textarea.selectionEnd = start + 1 + selectedText.length;
+                } else {
+                    // Just insert pair
+                    this.insertText(quote + quote);
+                    this.textarea.selectionStart = start + 1;
+                    this.textarea.selectionEnd = start + 1;
+                }
+            }
+
+            insertText(text) {
+                const start = this.textarea.selectionStart;
+                const end = this.textarea.selectionEnd;
+                const value = this.textarea.value;
+
+                this.textarea.value = value.substring(0, start) + text + value.substring(end);
+                this.textarea.selectionStart = this.textarea.selectionEnd = start + text.length;
+
+                this.updateLineNumbers();
+                this.updateSyntaxHighlighting();
+                if (this.scriptObj) {
+                    this.scriptObj.Source = this.textarea.value;
+                }
+            }
+
+            toggleFindReplace() {
+                this.isFindReplaceVisible = !this.isFindReplaceVisible;
+                this.findReplacePanel.style.display = this.isFindReplaceVisible ? 'flex' : 'none';
+                if (this.isFindReplaceVisible) {
+                    this.findInput.focus();
+                }
+            }
+
+            findAllMatches(searchText) {
+                if (!searchText) return [];
+
+                const matches = [];
+                const code = this.textarea.value;
+                let index = code.indexOf(searchText);
+
+                while (index !== -1) {
+                    matches.push({ start: index, end: index + searchText.length });
+                    index = code.indexOf(searchText, index + 1);
+                }
+
+                return matches;
+            }
+
+            highlightFindMatches() {
+                // Clear previous highlights
+                this.textarea.style.backgroundColor = '';
+
+                if (this.findMatches.length === 0) return;
+
+                // For now, just scroll to first match - full highlighting would need more implementation
+                this.currentFindIndex = 0;
+                this.scrollToMatch(this.findMatches[0]);
+            }
+
+            scrollToMatch(match) {
+                // Simple scroll to make match visible
+                const lineHeight = 14; // Approximate
+                const linesBefore = this.textarea.value.substring(0, match.start).split('\n').length - 1;
+                this.textarea.scrollTop = linesBefore * lineHeight;
+            }
+
+            replaceNext() {
+                if (this.findMatches.length === 0 || this.currentFindIndex >= this.findMatches.length) return;
+
+                const match = this.findMatches[this.currentFindIndex];
+                const value = this.textarea.value;
+                const before = value.substring(0, match.start);
+                const after = value.substring(match.end);
+
+                this.textarea.value = before + this.replaceText + after;
+                this.updateLineNumbers();
+                this.updateSyntaxHighlighting();
+
+                // Update matches
+                this.findMatches = this.findAllMatches(this.findText);
+                this.currentFindIndex = Math.min(this.currentFindIndex, this.findMatches.length - 1);
+
+                if (this.scriptObj) {
+                    this.scriptObj.Source = this.textarea.value;
+                }
+            }
+
+            replaceAll() {
+                if (!this.findText) return;
+
+                let value = this.textarea.value;
+                value = value.split(this.findText).join(this.replaceText);
+                this.textarea.value = value;
+
+                this.updateLineNumbers();
+                this.updateSyntaxHighlighting();
+                this.findMatches = [];
+
+                if (this.scriptObj) {
+                    this.scriptObj.Source = this.textarea.value;
+                }
+            }
+
+            foldAll() {
+                // Basic code folding - fold functions and if blocks
+                const code = this.textarea.value;
+                const lines = code.split('\n');
+                const foldedLines = new Set();
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (line.startsWith('function') || line.startsWith('if') || line.startsWith('for') || line.startsWith('while')) {
+                        // Find matching end
+                        let indentLevel = this.getIndentLevel(lines[i]);
+                        for (let j = i + 1; j < lines.length; j++) {
+                            if (lines[j].trim() === 'end' && this.getIndentLevel(lines[j]) === indentLevel) {
+                                for (let k = i + 1; k < j; k++) {
+                                    foldedLines.add(k);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                this.foldedRanges = foldedLines;
+                this.updateFoldedDisplay();
+            }
+
+            unfoldAll() {
+                this.foldedRanges.clear();
+                this.updateFoldedDisplay();
+            }
+
+            getIndentLevel(line) {
+                let level = 0;
+                for (const char of line) {
+                    if (char === ' ') level++;
+                    else if (char === '\t') level += 4;
+                    else break;
+                }
+                return level;
+            }
+
+            updateFoldedDisplay() {
+                // For now, just update syntax highlighting to reflect folding
+                this.updateSyntaxHighlighting();
+            }
+
+            formatCode() {
+                // Basic Lua code formatting
+                let code = this.textarea.value;
+                let formatted = code;
+
+                // Add proper indentation
+                const lines = code.split('\n');
+                let indentLevel = 0;
+                const formattedLines = [];
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed) {
+                        formattedLines.push('');
+                        continue;
+                    }
+
+                    // Decrease indent for end statements
+                    if (trimmed === 'end' || trimmed === 'elseif' || trimmed === 'else') {
+                        indentLevel = Math.max(0, indentLevel - 1);
+                    }
+
+                    // Add indentation
+                    const indented = '    '.repeat(indentLevel) + trimmed;
+                    formattedLines.push(indented);
+
+                    // Increase indent after certain statements
+                    if (trimmed.startsWith('function') || trimmed.startsWith('if') || trimmed.startsWith('for') || trimmed.startsWith('while') || trimmed === 'else') {
+                        indentLevel++;
+                    }
+                }
+
+                formatted = formattedLines.join('\n');
+                this.textarea.value = formatted;
+                this.updateLineNumbers();
+                this.updateSyntaxHighlighting();
+
+                if (this.scriptObj) {
+                    this.scriptObj.Source = formatted;
+                }
+            }
+
+            getValue() {
+                return this.textarea.value;
+            }
+
+            setValue(value) {
+                this.textarea.value = value;
+                this.updateLineNumbers();
+                this.updateSyntaxHighlighting();
+                if (this.scriptObj) {
+                    this.scriptObj.Source = value;
+                }
+            }
+
+            focus() {
+                this.textarea.focus();
+            }
+        }
+
+        // Make it globally available
+        window.RobloxCodeEditor = RobloxCodeEditor;
+    </script>
+</body>
+</html>

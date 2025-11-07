@@ -1,0 +1,28 @@
+{
+  "title": "Test Game",
+  "scripts": {},
+  "objects": {
+    "Part1": {
+      "ClassName": "Part",
+      "Name": "Part1",
+      "Position": [0, 10, 0],
+      "Size": [4, 2, 2],
+      "Color": [0.5, 0.5, 0.5],
+      "Anchored": false,
+      "CanCollide": true,
+      "Transparency": 0
+    },
+    "Part2": {
+      "ClassName": "Part",
+      "Name": "Part2",
+      "Position": [5, 15, 5],
+      "Size": [2, 4, 2],
+      "Color": [1, 0, 0],
+      "Anchored": false,
+      "CanCollide": true,
+      "Transparency": 0
+    }
+  },
+  "timestamp": "2025-01-01T00:00:00.000Z",
+  "version": "1.0"
+}
